@@ -47,6 +47,16 @@ mineos.server_list = function (base_dir) {
   return fs.readdirSync(path.join(base_dir, mineos.DIRS["servers"]));
 };
 
+// How long a server gets to save and stop before stop() reports it still
+// running, and how long the container's shutdown waits for every server.
+// One setting for both: MINEOS_SHUTDOWN_TIMEOUT, in seconds (default 120).
+// Whatever stops MineOS (docker's stop_grace_period, systemd's TimeoutStopSec)
+// must allow longer than this.
+mineos.stop_timeout_ms = function () {
+  var seconds = parseInt(process.env.MINEOS_SHUTDOWN_TIMEOUT, 10);
+  return (seconds > 0 ? seconds : 120) * 1000;
+};
+
 mineos.server_list_up = function () {
   return Object.keys(mineos.server_pids_up());
 };
@@ -944,7 +954,7 @@ mineos.mc = function (server_name, base_dir) {
     // restart skip starting the server again.
     var test_interval_ms = 200;
     var iterations = 0;
-    var MAX_ITERATIONS_TO_QUIT = (120 * 1000) / test_interval_ms;
+    var MAX_ITERATIONS_TO_QUIT = mineos.stop_timeout_ms() / test_interval_ms;
 
     async.series(
       [

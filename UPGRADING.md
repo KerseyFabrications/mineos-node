@@ -61,6 +61,11 @@ environment variables (`USER_NAME`, `USER_PASSWORD`, `USER_UID`, `GROUP_NAME`, `
   it to have Java chosen automatically. The web UI has no field for it.
 - **A legacy server (Minecraft 1.16 or older) never runs on a modern Java.** If no Java 8 is
   installed, it refuses to start and says why. The image includes Java 8.
+- **Stop and Restart wait up to 2 minutes** for a server to save (they gave up after 30 seconds,
+  and Restart then left the server stopped). The limit is `MINEOS_SHUTDOWN_TIMEOUT`, the same
+  setting container shutdown uses. **Bare-metal installs with the systemd unit:** update
+  `mineos-games.service` from `init/`; its `TimeoutStopSec` is now 180 so systemd does not cut
+  the shutdown short.
 - **`screenlog.0`** (screen's console log in each server directory) is rotated to `screenlog.1`
   at every start, instead of growing forever.
 - **NeoForge profile.** NeoForge builds, including 26.x, can be downloaded like any other

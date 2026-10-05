@@ -2,15 +2,16 @@ version: '3'
 
 services:
   mineos:
-    image: hexparrot/mineos:latest
+    image: ghcr.io/kerseyfabrications/mineos-node:latest
     container_name: mineos_server
     networks:
       - mineos
     restart: unless-stopped
 
-    # Adjust as needed; if this is too short, stopping the container
-    #  may corrupt map data
-    stop_grace_period: 10m
+    # Stopping the container saves and stops every running server first,
+    # waiting up to MINEOS_SHUTDOWN_TIMEOUT. Keep this longer than that, or
+    # docker kills servers before their worlds are saved.
+    stop_grace_period: 3m
 
     volumes:
       # Using a bind mapping is preferrable here due to how docker
@@ -20,6 +21,10 @@ services:
       - /var/games/mineos/minecraft:/var/games/minecraft
 
     environment:
+      # Seconds each server gets to save and stop (container shutdown, Stop,
+      # Restart). Keep stop_grace_period above longer than this.
+      MINEOS_SHUTDOWN_TIMEOUT: 120
+
       # Should the web interface use HTTPS or HTTP?
       # Valid entries are "true" and "false" (with quotes)
       USE_HTTPS: "true"
@@ -39,11 +44,14 @@ services:
       # already exists, account creation will be aborted.
       USER_UID: 1000
 
-      # If the account is being created, it will use either the password
-      # set below, or a random, 20 character password will generated for
-      # you and displayed in the console log. After first launch, you
-      # should check the log.
+      # The web interface password. Leave it as random_see_log to have a
+      # random password generated on first start; it is printed in the
+      # container log once and kept in /root/password inside the container.
       USER_PASSWORD: random_see_log
+
+      # If USER_UID is not 1000, set the group to match the owner of your
+      # server files too.
+      # GROUP_GID: 1000
 
     ports:
       # HTTPS port for web interface. If you change the SERVER_PORT

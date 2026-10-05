@@ -43,11 +43,10 @@ if ('base_directory' in mineos_config) {
 
 // Send stop to every running server, and keep checking: a server started
 // while this runs (a scheduled restart, a start from the web UI before it
-// went down) is stopped too. instance.stop() itself gives up waiting after
-// about 30 seconds, but large or modded worlds can take longer to save, so
-// wait until every server has exited or MINEOS_SHUTDOWN_TIMEOUT (seconds,
-// default 120) runs out. Exit 0 when all stopped, 1 on timeout.
-var shutdown_timeout_s = parseInt(process.env.MINEOS_SHUTDOWN_TIMEOUT, 10) || 120;
+// went down) is stopped too. Wait until every server has exited or
+// MINEOS_SHUTDOWN_TIMEOUT (seconds, default 120, the same limit each server's
+// stop uses) runs out. Exit 0 when all stopped, 1 on timeout.
+var shutdown_timeout_s = mineos.stop_timeout_ms() / 1000;
 var shutdown_deadline = Date.now() + shutdown_timeout_s * 1000;
 var signalled = {};
 

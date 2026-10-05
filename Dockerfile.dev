@@ -1,4 +1,4 @@
-FROM ubuntu:noble as build
+FROM ubuntu:26.04 AS build
 LABEL MAINTAINER='William Dizon <wdchromium@gmail.com>'
 
 #set build directory
@@ -9,19 +9,19 @@ ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y \
   curl \
   build-essential \
-  && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+  && curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
   && apt-get install -y nodejs
 
-# copy package.json and npm install
-# by copying package.json first we stop changes in other files from triggerig a rebuild of this image stage
-COPY package.json /build
-RUN npm install
+# copy package.json and the lockfile and install from it
+# by copying them first we stop changes in other files from triggering a rebuild of this image stage
+COPY package.json package-lock.json /build/
+RUN npm ci --omit=dev --no-audit --no-fund
 
 #copy other files to build dir
 COPY . /build
 
 #final image
-FROM ubuntu:noble
+FROM ubuntu:26.04
 
 WORKDIR /usr/games/minecraft
 
@@ -35,9 +35,11 @@ RUN apt-get update && apt-get install -y \
   curl \
   rlwrap \
   openjdk-25-jre-headless \
+  openjdk-21-jre-headless \
   openjdk-8-jre-headless \
   ca-certificates-java \
-  && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+  && update-alternatives --set java /usr/lib/jvm/java-25-openjdk-$(dpkg --print-architecture)/bin/java \
+  && curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
   && apt-get install -y nodejs \
   && apt-get autoremove -y \
   && apt-get clean \
@@ -55,4 +57,5 @@ ENTRYPOINT ["/entrypoint.sh"]
 EXPOSE 8443 25565-25570
 VOLUME /var/games/minecraft
 VOLUME /etc/ssl/certs
-ENV USER_PASSWORD=random_see_log USER_NAME=mc USER_UID=1000 USE_HTTPS=true SERVER_PORT=8443
+ENV USER_PASSWORD=random_see_log USER_NAME=mc USER_UID=1000 USE_HTTPS=true SERVER_PORT=8443 \
+    MINEOS_SHUTDOWN_TIMEOUT=120

@@ -7,11 +7,14 @@ User=root
 WorkingDirectory=/usr/games/minecraft
 Type=oneshot
 Environment="SHELL=/bin/bash"
+# Seconds each server gets to save and stop. TimeoutStopSec below must be
+# longer, or systemd kills the shutdown while worlds are still saving.
+Environment="MINEOS_SHUTDOWN_TIMEOUT=120"
 ExecStart=/bin/true
 ExecStop=/usr/bin/node mineos_shutdown.js
 StandardOutput=syslog
 RemainAfterExit=yes
-TimeoutStopSec=120
+TimeoutStopSec=180
 
 [Install]
 WantedBy=multi-user.target
