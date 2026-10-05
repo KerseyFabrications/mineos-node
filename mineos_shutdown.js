@@ -74,3 +74,22 @@ for (server of servers) {
 
 }
 console.log("Waiting for servers to stop");
+
+// instance.stop() gives up waiting after about 30 seconds, but a large or
+// modded world can take longer to save. Keep waiting until every server has
+// exited or MINEOS_SHUTDOWN_TIMEOUT (seconds, default 120) runs out, so the
+// caller only kills what is left after that.
+var shutdown_timeout_s = parseInt(process.env.MINEOS_SHUTDOWN_TIMEOUT, 10) || 120;
+var shutdown_deadline = Date.now() + shutdown_timeout_s * 1000;
+var shutdown_poll = setInterval(function () {
+    var still_up = Object.keys(mineos.server_pids_up());
+    if (!still_up.length) {
+        console.log("All servers stopped");
+        clearInterval(shutdown_poll);
+        process.exit(0);
+    } else if (Date.now() > shutdown_deadline) {
+        console.error("Timed out after", shutdown_timeout_s, "s; still running:", still_up.join(", "));
+        clearInterval(shutdown_poll);
+        process.exit(1);
+    }
+}, 1000);

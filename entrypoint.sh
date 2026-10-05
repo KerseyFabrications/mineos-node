@@ -113,4 +113,20 @@ else
     sed -i 's/use_https = false/use_https = true/' /etc/mineos.conf
 fi
 
-exec "$@"
+# Run supervisor as a child rather than exec'ing it. When the container is
+# stopped, save and stop every running Minecraft server first; otherwise the
+# servers die with supervisor and lose whatever was not yet written to disk.
+# Give the container a stop grace period longer than MINEOS_SHUTDOWN_TIMEOUT.
+"$@" &
+child=$!
+
+stop_games() {
+  echo >&2 "Container stopping: saving and stopping Minecraft servers"
+  (cd /usr/games/minecraft && node mineos_shutdown.js) || echo >&2 "Some servers did not stop in time"
+  kill -TERM "$child" 2>/dev/null
+  wait "$child"
+  exit 0
+}
+trap stop_games TERM INT
+
+wait "$child"

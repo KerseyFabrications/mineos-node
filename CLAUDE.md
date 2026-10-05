@@ -96,6 +96,10 @@ Java, Node and Ubuntu, and ships a container image people can actually install.
 - **Native npm modules** (`posix`, `userid`, `diskusage`) compile at install time. Login depends on
   `posix`. npm warns that install scripts are not covered by `allowScripts`; if a future npm stops
   running them by default, login breaks. Check this on every Node or npm upgrade.
+- **Container stop saves the worlds.** `entrypoint.sh` keeps supervisor as a child, traps the stop
+  signal, and runs `mineos_shutdown.js`, which sends `stop` to every running server and waits up to
+  `MINEOS_SHUTDOWN_TIMEOUT` seconds (default 120). Docker's own stop timeout defaults to 10 seconds,
+  so deployments must set a longer one (`stop_grace_period` in compose).
 - **uid/gid 1000 already exist** in the Ubuntu base image (`ubuntu`). Containers that set
   `USER_UID`/`GROUP_GID` to match NAS ownership avoid a duplicate-id collision.
 
