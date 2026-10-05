@@ -57,6 +57,36 @@ mineos.stop_timeout_ms = function () {
   return (seconds > 0 ? seconds : 120) * 1000;
 };
 
+// Calls back once a child process has finished: null when it exited with one
+// of ok_codes (default [0]), otherwise a description of what went wrong. A
+// process that could not be started at all (a missing binary, or the OS
+// refusing the server owner's uid or gid) emits "error" and no exit code;
+// that is a failure too, not a quiet success with nothing written.
+mineos.on_child_done = function (proc, ok_codes, callback) {
+  if (typeof ok_codes == "function") {
+    callback = ok_codes;
+    ok_codes = [0];
+  }
+  var done = false;
+  function finish(err) {
+    if (done) return;
+    done = true;
+    callback(err);
+  }
+  proc.once("error", function (err) {
+    finish("could not run: {0}".format(err.message || err));
+  });
+  proc.once("close", function (code, signal) {
+    if (code !== null && ok_codes.indexOf(code) != -1) finish(null);
+    else if (signal) finish("killed by {0}".format(signal));
+    else finish("exited with code {0}".format(code));
+  });
+};
+
+// GNU tar exits 1 when a file changed while it was read, which is normal for
+// a running server; only 2 and up are failures.
+var TAR_OK_CODES = [0, 1];
+
 mineos.server_list_up = function () {
   return Object.keys(mineos.server_pids_up());
 };
@@ -552,9 +582,7 @@ mineos.mc = function (server_name, base_dir) {
             function (cb) {
               memoize_timestamps = {};
               var proc = child_process.spawn(binary, args, params);
-              proc.once("exit", function (code) {
-                cb(code);
-              });
+              mineos.on_child_done(proc, cb);
             },
           ],
           callback,
@@ -1163,9 +1191,7 @@ mineos.mc = function (server_name, base_dir) {
         },
         function (cb) {
           var proc = child_process.spawn(binary, args, params);
-          proc.once("exit", function (code) {
-            cb(code);
-          });
+          mineos.on_child_done(proc, TAR_OK_CODES, cb);
         },
       ],
       callback,
@@ -1180,6 +1206,7 @@ mineos.mc = function (server_name, base_dir) {
 
     var params = { cwd: self.env.cwd };
     var autosave = true;
+    var saving_off = false;
 
     async.series(
       [
@@ -1189,7 +1216,12 @@ mineos.mc = function (server_name, base_dir) {
             cb(err);
           });
         },
-        async.apply(self.stuff, "save-off"),
+        function (cb) {
+          self.stuff("save-off", function (err) {
+            saving_off = !err;
+            cb(err);
+          });
+        },
         async.apply(self.saveall_latest_log),
         function (cb) {
           self.property("owner", function (err, result) {
@@ -1200,16 +1232,17 @@ mineos.mc = function (server_name, base_dir) {
         },
         function (cb) {
           var proc = child_process.spawn(binary, args, params);
-          proc.once("exit", function (code) {
-            cb(null);
-          });
-        },
-        function (cb) {
-          if (autosave) self.stuff("save-on", cb);
-          else cb(null);
+          mineos.on_child_done(proc, TAR_OK_CODES, cb);
         },
       ],
-      callback,
+      function (err) {
+        // Once saving was turned off, turn it back on whatever happened after.
+        if (saving_off && autosave)
+          self.stuff("save-on", function () {
+            callback(err);
+          });
+        else callback(err);
+      },
     );
   };
 
@@ -1229,9 +1262,7 @@ mineos.mc = function (server_name, base_dir) {
         },
         function (cb) {
           var proc = child_process.spawn(binary, args, params);
-          proc.once("exit", function (code) {
-            cb(code);
-          });
+          mineos.on_child_done(proc, cb);
         },
       ],
       callback,
@@ -1244,9 +1275,7 @@ mineos.mc = function (server_name, base_dir) {
     var params = { cwd: self.env.bwd };
 
     var proc = child_process.spawn(binary, args, params);
-    proc.once("exit", function (code) {
-      callback(code);
-    });
+    mineos.on_child_done(proc, callback);
   };
 
   self.list_increments = function (callback) {
@@ -1359,22 +1388,7 @@ mineos.mc = function (server_name, base_dir) {
     var args = ["--force", "--remove-older-than", step, self.env.bwd];
     var params = { cwd: self.env.bwd };
     var proc = child_process.spawn(binary, args, params);
-
-    proc.on("error", function (code) {
-      callback(code, null);
-    });
-
-    proc.on("error", function (code) {
-      // branch if path does not exist
-      if (code != 0) callback(true);
-    });
-
-    proc.on("exit", function (code) {
-      if (code == 0)
-        // branch if all is well
-        callback(code); // branch if dir exists, not an rdiff-backup dir
-      else callback(true);
-    });
+    mineos.on_child_done(proc, callback);
   };
 
   self.delete_archive = function (filename, callback) {
@@ -1908,18 +1922,11 @@ mineos.mc = function (server_name, base_dir) {
       var params = { cwd: self.env.bwd };
       var proc = child_process.spawn(binary, args, params);
 
-      proc.on("error", function (code) {
-        callback(code, null);
-      });
-
-      proc.on("exit", function (code) {
-        if (code == 0) {
-          fs.readFile(new_file_path, function (inner_err, data) {
-            callback(inner_err, data.toString());
-          });
-        } else {
-          callback(code, null);
-        }
+      mineos.on_child_done(proc, function (run_err) {
+        if (run_err) return callback(run_err, null);
+        fs.readFile(new_file_path, function (inner_err, data) {
+          callback(inner_err, inner_err ? null : data.toString());
+        });
       });
     });
   };
