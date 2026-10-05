@@ -15,6 +15,7 @@ var expressSession = require('express-session');
 var bodyParser = require('body-parser');
 var methodOverride = require('method-override');
 var cookieParser = require('cookie-parser');
+var security = require('./security');
 
 var sessionStore = new expressSession.MemoryStore();
 var app = express();
@@ -111,6 +112,7 @@ function ensureAuthenticated(req, res, next) {
 
 var token = require('crypto').randomBytes(48).toString('hex');
 
+app.use(security.requireSameOrigin);
 app.use(bodyParser.urlencoded({extended: false}));
 app.use(methodOverride());
 app.use(compression());
@@ -119,12 +121,18 @@ app.use(expressSession({
   key: 'express.sid',
   store: sessionStore,
   resave: false,
-  saveUninitialized: false
+  saveUninitialized: false,
+  // Lax keeps the cookie off cross-site requests and WebSocket handshakes
+  // while still allowing a normal link into the web UI.
+  cookie: { httpOnly: true, sameSite: 'lax', secure: 'auto' }
 }));
 app.use(passport.initialize());
 app.use(passport.session());
 
-var io = require('socket.io')(http)
+// Refuse socket.io handshakes from another origin: the socket carries every
+// server command, and a browser would otherwise attach the session cookie.
+var io_options = { allowRequest: security.allowSocketRequest };
+var io = require('socket.io')(http, io_options)
 io.use(passportSocketIO.authorize({
   cookieParser: cookieParser,       // the same middleware you registrer in express
   key:          'express.sid',       // the name of the cookie where express/connect stores its session_id
@@ -173,7 +181,7 @@ mineos.dependencies(function(err, binaries) {
   if ('base_directory' in mineos_config) {
     try {
       if (mineos_config['base_directory'].length < 2)
-        throw new error('Invalid base_directory length.');
+        throw new Error('Invalid base_directory length.');
 
       base_directory = mineos_config['base_directory'];
       fs.ensureDirSync(base_directory);
@@ -209,10 +217,17 @@ mineos.dependencies(function(err, binaries) {
         })
     );
 
-  app.all('/api/:server_name/:command', ensureAuthenticated, function(req, res) {
+  // HTTP API for scripts. POST only (a link or image cannot trigger it) and
+  // limited to the commands the web UI itself offers.
+  app.post('/api/:server_name/:command', ensureAuthenticated, function(req, res) {
     var target_server = req.params.server_name;
     var user = req.user.username;
     var instance = be.servers[target_server];
+
+    if (!security.isApiCommand(req.params.command)) {
+      console.error('Refusing API command "', req.params.command, '" from', user);
+      return res.status(400).end();
+    }
 
     var args = req.body;
     args['command'] = req.params.command;
@@ -229,6 +244,11 @@ mineos.dependencies(function(err, binaries) {
     var target_server = req.body.server_name;
     var instance = be.servers[target_server];
     var user = req.user.username;
+
+    if (!security.isApiCommand(req.body.command)) {
+      console.error('Refusing API command "', req.body.command, '" from', user);
+      return res.status(400).end();
+    }
     
     if (instance)
       instance.direct_dispatch(user, req.body);
@@ -299,7 +319,7 @@ mineos.dependencies(function(err, binaries) {
         }
 
         var https_server = https.createServer(ssl, app).listen(SOCKET_PORT, SOCKET_HOST, function() {
-          io.attach(https_server);
+          io.attach(https_server, io_options);
           console.log('MineOS webui listening on HTTPS://' + SOCKET_HOST + ':' + SOCKET_PORT);
         });
       }
