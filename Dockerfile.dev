@@ -29,7 +29,8 @@ RUN apt-get update && apt-get install -y \
 # copy package.json and the lockfile and install from it
 # by copying them first we stop changes in other files from triggering a rebuild of this image stage
 COPY package.json package-lock.json /build/
-RUN npm ci --omit=dev --no-audit --no-fund
+# native modules build against the installed Node's headers, not a download
+RUN npm_config_nodedir=/usr npm ci --omit=dev --no-audit --no-fund
 
 #copy other files to build dir
 COPY . /build

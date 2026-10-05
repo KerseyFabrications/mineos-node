@@ -60,11 +60,13 @@ RUN cd /usr/games/minecraft \
   && cp mineos.conf /etc/mineos.conf \
   && chmod +x webui.js mineos_console.js service.js
 
-#build npm deps and clean up apt for image minimalization
+#build npm deps and clean up apt for image minimalization. Native modules build
+#against the installed Node's own headers (/usr/include/node), not headers
+#downloaded from nodejs.org at build time.
 RUN cd /usr/games/minecraft \
   && apt-get update \
   && apt-get install -y build-essential \
-  && npm ci --omit=dev --no-audit --no-fund \
+  && npm_config_nodedir=/usr npm ci --omit=dev --no-audit --no-fund \
   && apt-get remove --purge -y build-essential \
   && apt-get autoremove -y \
   && apt-get clean \
