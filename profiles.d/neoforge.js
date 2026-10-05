@@ -3,6 +3,7 @@ var fs = require('fs-extra');
 var crypto = require('crypto');
 var profile = require('./template');
 var java = require('../java');
+var mc_version = require('../mc_version');
 
 // NeoForged ServerStarterJar, pinned so every install runs the same reviewed
 // launcher. To update: take the new release's server.jar digest from
@@ -37,27 +38,19 @@ exports.profile = {
         versions.push(match[1]);
       }
 
-      // NeoForge versions up to 1.21.x: <mc_minor>.<mc_patch>.<build>[-beta]
-      //   e.g. 21.4.111-beta -> Minecraft 1.21.4, build 111, beta
-      // From 26.x on: <year>.<drop>.<hotfix>.<build>[-beta|-alpha...]
-      //   e.g. 26.3.0.48-beta -> Minecraft 26.3, build 48, beta
-      var nf_regex = /^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?(-[0-9A-Za-z.+-]+)?$/;
-
       for (var i = 0; i < versions.length; i++) {
         var nfver = versions[i];
-        var ver = nfver.match(nf_regex);
-        if (!ver) continue;
-
-        var mcver = java.minecraftFromNeoForge(nfver);
-        if (!mcver) continue;
-        var is_prerelease = !!ver[5];
+        var parsed = mc_version.parseNeoForge(nfver);
+        if (!parsed) continue;
+        var mcver = parsed.minecraft;
+        var is_prerelease = !!parsed.prerelease;
 
         var item = new profile();
         item['id'] = nfver;
         item['type'] = is_prerelease ? 'snapshot' : 'release';
         item['group'] = 'neoforge';
         item['webui_desc'] = is_prerelease
-          ? 'NeoForge {0} (MC {1}, {2})'.format(nfver, mcver, ver[5].slice(1).split(/[.+]/)[0])
+          ? 'NeoForge {0} (MC {1}, {2})'.format(nfver, mcver, parsed.prerelease)
           : 'NeoForge {0} (MC {1})'.format(nfver, mcver);
         item['weight'] = 0;
         item['version'] = nfver;
@@ -103,7 +96,7 @@ exports.profile = {
 
     // The installer runs the target version's processors, so run it on the
     // Java that version's servers will use.
-    var required = java.requiredJavaForMinecraft(java.minecraftFromNeoForge(nfver));
+    var required = mc_version.requiredJavaForMinecraft(mc_version.minecraftFromNeoForge(nfver));
     var picked = required ? java.pickJava(required, java.installedJavas()) : null;
     var java_binary = picked ? picked.binary : 'java';
 

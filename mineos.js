@@ -620,24 +620,27 @@ mineos.mc = function (server_name, base_dir) {
   };
 
   self.get_start_args = function (callback) {
+    // The Java runtime this start uses, logged with why it was chosen.
+    function start_java_binary(cb) {
+      self.sc(function (err, dict) {
+        if (err) return cb(err);
+        java.resolveJava(self.env.cwd, dict, function (java_err, picked) {
+          if (java_err) return cb(java_err);
+          logging.info("[{0}] starting with {1} ({2}{3})".format(
+            self.server_name,
+            picked.binary,
+            picked.source,
+            picked.required ? ", needs Java {0}".format(picked.required) : "",
+          ));
+          cb(null, picked.binary);
+        });
+      });
+    }
+
     function type_jar_unconventional(inner_callback) {
       async.series(
         {
-          binary: function (cb) {
-            self.sc(function (err, dict) {
-              if (err) return cb(err);
-              java.resolveJava(self.env.cwd, dict, function (java_err, picked) {
-                if (java_err) return cb(java_err);
-                logging.info("[{0}] starting with {1} ({2}{3})".format(
-                  self.server_name,
-                  picked.binary,
-                  picked.source,
-                  picked.required ? ", needs Java {0}".format(picked.required) : "",
-                ));
-                cb(null, picked.binary);
-              });
-            });
-          },
+          binary: start_java_binary,
           xmx: function (cb) {
             self.sc(function (err, dict) {
               var value = parseInt((dict.java || {}).java_xmx) || 0;
@@ -704,21 +707,7 @@ mineos.mc = function (server_name, base_dir) {
     function type_jar(inner_callback) {
       async.series(
         {
-          binary: function (cb) {
-            self.sc(function (err, dict) {
-              if (err) return cb(err);
-              java.resolveJava(self.env.cwd, dict, function (java_err, picked) {
-                if (java_err) return cb(java_err);
-                logging.info("[{0}] starting with {1} ({2}{3})".format(
-                  self.server_name,
-                  picked.binary,
-                  picked.source,
-                  picked.required ? ", needs Java {0}".format(picked.required) : "",
-                ));
-                cb(null, picked.binary);
-              });
-            });
-          },
+          binary: start_java_binary,
           xmx: function (cb) {
             self.sc(function (err, dict) {
               var value = parseInt((dict.java || {}).java_xmx) || 0;

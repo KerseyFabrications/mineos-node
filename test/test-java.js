@@ -4,53 +4,6 @@ var path = require("path");
 var java = require("../java");
 var test = exports;
 
-test.required_java_for_minecraft = function (t) {
-  t.equal(java.requiredJavaForMinecraft("26.1"), 25);
-  t.equal(java.requiredJavaForMinecraft("26.3.1"), 25);
-  t.equal(java.requiredJavaForMinecraft("1.21.5"), 21);
-  t.equal(java.requiredJavaForMinecraft("1.20.5"), 21);
-  t.equal(java.requiredJavaForMinecraft("1.20.4"), 17);
-  t.equal(java.requiredJavaForMinecraft("1.18"), 17);
-  t.equal(java.requiredJavaForMinecraft("1.17.1"), 16);
-  t.equal(java.requiredJavaForMinecraft("1.16.5"), 8);
-  t.equal(java.requiredJavaForMinecraft("1.7.10"), 8);
-  t.equal(java.requiredJavaForMinecraft(""), null);
-  t.equal(java.requiredJavaForMinecraft("latest"), null);
-  t.done();
-};
-
-test.minecraft_from_neoforge = function (t) {
-  t.equal(java.minecraftFromNeoForge("21.1.229"), "1.21.1");
-  t.equal(java.minecraftFromNeoForge("21.4.111-beta"), "1.21.4");
-  t.equal(java.minecraftFromNeoForge("21.0.167"), "1.21");
-  t.equal(java.minecraftFromNeoForge("20.4.237"), "1.20.4");
-  t.equal(java.minecraftFromNeoForge("26.1.0.12-beta"), "26.1");
-  t.equal(java.minecraftFromNeoForge("26.3.0.48-beta"), "26.3");
-  t.equal(java.minecraftFromNeoForge("26.3.1.5"), "26.3.1");
-  t.equal(java.minecraftFromNeoForge("26.1.0.0-alpha.1+snapshot-1"), "26.1");
-  t.equal(java.minecraftFromNeoForge("not-a-version"), null);
-  t.done();
-};
-
-test.minecraft_from_jar_name = function (t) {
-  t.equal(java.minecraftFromJarName("minecraft_server.26.3.jar"), "26.3");
-  t.equal(java.minecraftFromJarName("minecraft_server.1.21.5.jar"), "1.21.5");
-  t.equal(java.minecraftFromJarName("fabric-server-mc.1.21.1-loader.0.17.3-launcher.1.1.0.jar"), "1.21.1");
-  t.equal(java.minecraftFromJarName("forge-1.21.1-52.1.6-installer.jar"), "1.21.1");
-  t.equal(java.minecraftFromJarName("paper-1.21.4-232.jar"), "1.21.4");
-  t.equal(java.minecraftFromJarName("server.jar"), null);
-  t.done();
-};
-
-test.minecraft_from_profile = function (t) {
-  t.equal(java.minecraftFromProfile("1.21.5-latest"), "1.21.5");
-  t.equal(java.minecraftFromProfile("1.19"), "1.19");
-  t.equal(java.minecraftFromProfile("26.3"), "26.3");
-  t.equal(java.minecraftFromProfile("21.1.229"), "1.21.1");
-  t.equal(java.minecraftFromProfile(""), null);
-  t.done();
-};
-
 test.minecraft_from_server_dir = function (t) {
   var dir = fs.mkdtempSync(path.join(os.tmpdir(), "mineos-java-"));
   t.equal(java.minecraftFromServerDir(dir), null);
@@ -136,13 +89,6 @@ test.required_java_from_jar = function (t) {
   t.equal(java.requiredJavaFromJar(path.join(dir, "minecraft_server.26.3.jar")), 25);
   t.equal(java.requiredJavaFromJar(path.join(dir, "missing.jar")), null);
   fs.rmSync(dir, { recursive: true, force: true });
-  t.done();
-};
-
-test.compare_versions = function (t) {
-  t.ok(java.compareVersions("1.21.10", "1.21.9") > 0);
-  t.ok(java.compareVersions("26.1", "1.21.11") > 0);
-  t.equal(java.compareVersions("1.21", "1.21.0"), 0);
   t.done();
 };
 
