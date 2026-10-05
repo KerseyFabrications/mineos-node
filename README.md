@@ -1,6 +1,12 @@
 Node.JS MineOS
 ======
 
+> **This is a maintained fork of [hexparrot/mineos-node](https://github.com/hexparrot/mineos-node).**
+> It runs current Minecraft (26.x needs Java 25) and ships an up-to-date container image:
+> `ghcr.io/kerseyfabrications/mineos-node`, with Java 25, 21 and 8, each server picking the one it
+> needs. Moving an existing install over? Read [UPGRADING.md](UPGRADING.md) first. Thanks to
+> William Dizon (hexparrot) and every MineOS contributor; this fork builds on their work.
+
 MineOS is a server front-end to ease managing Minecraft administrative tasks.
 This iteration using Node.js aims to enhance previous MineOS scripts (Python-based),
 by leveraging the event-triggering, asyncronous model of Node.JS and websockets.
