@@ -36,6 +36,14 @@ environment variables (`USER_NAME`, `USER_PASSWORD`, `USER_UID`, `GROUP_NAME`, `
 
 **What behaves differently:**
 
+- **Cross-site requests are refused.** The web UI only accepts changes and socket connections
+  from its own address (or the address a reverse proxy forwards as `X-Forwarded-Host`). The HTTP
+  API at `/api/<server>/<command>` and `/admin/command` takes POST only and only the server
+  commands the web UI offers (start, stop, restart, backup, ...); deleting a server is web-UI only.
+- **Without `USER_PASSWORD`, the generated password now survives a restart.** It is random, kept
+  in `/root/password` inside the container, and printed once when it is created. Before, a
+  restarted container fell back to the literal password `random_see_log`. If you relied on the
+  default, read the new password from the container log or set `USER_PASSWORD`.
 - **Java is chosen per server.** A server with an empty `java_binary` now runs on the Java its
   Minecraft version needs (26.x on 25, 1.20.5 to 1.21.x on 21, 1.17 to 1.20.4 on 17 or newer,
   older on 8), instead of the one `java` on the PATH. A server with `java_binary` set keeps using

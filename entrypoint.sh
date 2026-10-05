@@ -1,20 +1,23 @@
 #!/bin/bash
 set -eo pipefail
 
-if [[ ! -f /root/password ]]; then
-  if [ -z "$USER_PASSWORD" ] || [ "$USER_PASSWORD" = "random_see_log" ]; then
-    echo >&2 'USER_PASSWORD not specified, generating random password.'
-    USER_PASSWORD=$(date +%s | sha256sum | base64 | head -c 20 ; echo)
-    echo >&2 '*******************************************************'
-    echo >&2 'Password set to: ' $USER_PASSWORD
-    echo >&2 '*******************************************************'
-
-    echo 'Password set to: ' $USER_PASSWORD > /root/password
-
-  fi
+# Web UI password. An explicit USER_PASSWORD is always used. Without one, a
+# random password is generated on the first start, kept in /root/password
+# (readable by root only) and reused when the same container restarts. It used
+# to fall back to the literal default "random_see_log" after a restart.
+if [ -z "$USER_PASSWORD" ] || [ "$USER_PASSWORD" = "random_see_log" ]; then
+  if [ -s /root/password ]; then
+    # older images wrote "Password set to: <password>"
+    USER_PASSWORD=$(sed -e 's/^Password set to: *//' /root/password | head -n 1)
+    echo >&2 "USER_PASSWORD not specified; using the generated password stored in /root/password"
   else
-  echo >&2 "Password already set by entrypoint.sh, at /root/password"
-  cat /root/password
+    USER_PASSWORD=$(node -e 'process.stdout.write(require("crypto").randomBytes(15).toString("base64url"))')
+    (umask 077 && printf '%s\n' "$USER_PASSWORD" > /root/password)
+    echo >&2 '*******************************************************'
+    echo >&2 "USER_PASSWORD not specified; generated web UI password: $USER_PASSWORD"
+    echo >&2 'It is kept in /root/password. Set USER_PASSWORD to choose your own.'
+    echo >&2 '*******************************************************'
+  fi
 fi
 
 if [ "$USER_NAME" ]; then
