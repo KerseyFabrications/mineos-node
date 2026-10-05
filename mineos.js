@@ -1264,12 +1264,18 @@ mineos.mc = function (server_name, base_dir) {
       output += data.toString("ascii");
     });
 
-    rdiff.on("error", function (code) {
-      // branch if path does not exist
-      if (code != 0) callback(true, []);
+    // "close", not "exit": exit can fire before all of stdout has been read.
+    var finished = false;
+    rdiff.on("error", function () {
+      // rdiff-backup could not run (path does not exist)
+      if (finished) return;
+      finished = true;
+      callback(true, []);
     });
 
-    rdiff.on("exit", function (code) {
+    rdiff.on("close", function (code) {
+      if (finished) return;
+      finished = true;
       if (code != 0) return callback(true, []); // dir exists, not an rdiff-backup dir
       output.split("\n").forEach(function (line) {
         var match = line.match(regex);
@@ -1294,12 +1300,18 @@ mineos.mc = function (server_name, base_dir) {
       output += data.toString("ascii");
     });
 
-    rdiff.on("error", function (code) {
-      // branch if path does not exist
-      if (code != 0) callback(true, []);
+    // "close", not "exit": exit can fire before all of stdout has been read.
+    var finished = false;
+    rdiff.on("error", function () {
+      // rdiff-backup could not run (path does not exist)
+      if (finished) return;
+      finished = true;
+      callback(true, []);
     });
 
-    rdiff.on("exit", function (code) {
+    rdiff.on("close", function (code) {
+      if (finished) return;
+      finished = true;
       if (code != 0) return callback(true, []); // dir exists, not an rdiff-backup dir
       output.split("\n").forEach(function (line) {
         var match = line.match(regex);
