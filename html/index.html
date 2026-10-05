@@ -866,37 +866,35 @@
                                                 <div class="body-inner">
 
                                                     <div class="span4">
-                                                        <button type="button" class="btn btn-success span12" ng-disabled="servers[current].heartbeat.up || servers[current].transition || !valid_server_name(current)" ng-click="server_command('start')" translate="START" ng-show="(servers[current].sc.java.jarfile && servers[current].sc.java.java_xmx)"></button>
+                                                        <button type="button" class="btn btn-success span12" ng-disabled="!servers[current].can('start') || !valid_server_name(current)" ng-click="server_command('start')" translate="START" ng-show="(servers[current].sc.java.jarfile && servers[current].sc.java.java_xmx)"></button>
                                                         <button type="button" class="btn btn-success span12" ng-disabled="servers[current].heartbeat.up || !valid_server_name(current)" ng-click="modals.open_new_server()" translate="START" ng-show="!(servers[current].sc.java.jarfile && servers[current].sc.java.java_xmx)"></button>
                                                     </div>
 
                                                     <div class="span4">
                                                         <div class="btn-group btn-block">
                                                             <button class="btn btn-danger span6" translate="STOP"
-                                                                    ng-disabled="!servers[current].heartbeat.up || servers[current].transition"
+                                                                    ng-disabled="!servers[current].can('stop')"
                                                                     ng-click="server_command('stop')"
                                                                     ng-hide="servers[current].sc.minecraft.unconventional"
                                                                     ></button>
                                                             <button class="btn btn-danger span6" translate="KILL"
-                                                                    ng-disabled="!servers[current].heartbeat.up" 
+                                                                    ng-disabled="!servers[current].can('kill')"
                                                                     ng-click="server_command('kill')" 
                                                                     ng-hide="!servers[current].sc.minecraft.unconventional"
                                                                     ></button>
                                                             <button class="btn btn-danger dropdown-toggle" data-toggle="dropdown"><span class="caret"></span></button>
                                                             <ul class="dropdown-menu">
-                                                                <li><a href="#" translate="STOP"
+                                                                <li ng-class="{disabled: !servers[current].can('stop')}"><a href="#" translate="STOP"
                                                                        ng-hide="extra_action('stop')"
-                                                                       ng-disabled="!servers[current].heartbeat.up"
                                                                        ng-click="server_command('stop')"></a></li>
-                                                                <li><a href="#" translate="STOP_AND_BACKUP"
+                                                                <li ng-class="{disabled: !servers[current].can('stop_and_backup')}"><a href="#" translate="STOP_AND_BACKUP"
                                                                        ng-hide="extra_action('stop_and_backup')"
                                                                        ng-click="server_command('stop_and_backup')"></a></li>
-                                                                <li><a href="#" translate="RESTART"
+                                                                <li ng-class="{disabled: !servers[current].can('restart')}"><a href="#" translate="RESTART"
                                                                        ng-hide="extra_action('restart')"
                                                                        ng-click="server_command('restart')"></a></li>
-                                                                <li><a href="#" translate="KILL"
-                                                                       ng-click="server_command('kill')"
-                                                                       ng-disabled="!servers[current].heartbeat.up"></a></li>
+                                                                <li ng-class="{disabled: !servers[current].can('kill')}"><a href="#" translate="KILL"
+                                                                       ng-click="server_command('kill')"></a></li>
                                                                 <li><a><span class="monospace" translate="SERVER_ACTIONS"></span>:</a></li>
                                                                 <li><a href="#" class="monospace"
                                                                        ng-hide="extra_action('reload')"

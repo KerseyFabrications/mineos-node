@@ -49,7 +49,9 @@
   "STARTING_NOTICE": "This can take a minute or two for modded servers.",
   "STOPPING_NOTICE": "Saving the world and stopping.",
   "READY_NOTICE": "Up and ready for players.",
-  "START_ABORTED_NOTICE": "Stopped while starting. Check the server's log.",
+  "START_ABORTED_NOTICE": "It stopped while starting. See Logging, logs/latest.log, for why.",
+  "KILL_NOTICE": "Stopping it immediately, without saving.",
+  "stop_timeout": "Still running two minutes after stop. Try again, or use Kill.",
 
   "SERVER_NAME": "Server Name",
   "CREATE_HELP": "Only letters, numbers and underscores.",

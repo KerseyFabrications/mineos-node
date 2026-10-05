@@ -747,6 +747,51 @@ function server_container(server_name, user_config, socket_io) {
 
   logging.info('[{0}] Discovered server'.format(server_name));
 
+  // What the server is in the middle of: {action: 'start' or 'stop', since,
+  // fin (the command has returned), fin_at}. Kept here rather than in a
+  // browser so every viewer, and starts from cron, boot or the HTTP API, show
+  // the same state. Every way to start or stop a server calls these methods on
+  // the instance (restart calls stop and then start through them too), so
+  // wrapping them sees all of it. The heartbeat settles it and reports it.
+  var activity = null;
+  var STARTED_FAILED_GRACE_MS = 15 * 1000;   // down this long after start returned: it died
+  var READY_TIMEOUT_MS = 10 * 60 * 1000;     // stop waiting for a server that never reports ready
+  var LOG_TAIL_BYTES = 64 * 1024;
+
+  ['start', 'restart', 'stop', 'stop_and_backup', 'kill'].forEach(function(command) {
+    var original = instance[command];
+    instance[command] = function(callback) {
+      begin_activity(command);
+      original(function(err) {
+        end_activity(command, err);
+        if (typeof callback == 'function')
+          callback.apply(null, arguments);
+      });
+    };
+  });
+
+  function begin_activity(command) {
+    if (command == 'start')
+      activity = { action: 'start', since: Date.now(), fin: false };
+    else if (command != 'restart' || !activity) // restart's own stop and start set it next
+      activity = { action: 'stop', since: Date.now(), fin: false };
+    heartbeat();
+  }
+
+  function end_activity(command, err) {
+    if (!activity) return;
+    if (command == 'start' && activity.action == 'start') {
+      if (err) activity = null; // server_fin carries the reason
+      else {
+        activity.fin = true;
+        activity.fin_at = Date.now();
+      }
+    } else if (command != 'start' && (err || activity.action == 'stop')) {
+      activity = null;
+    }
+    heartbeat();
+  }
+
   // check that awd and bwd also exist alongside cwd or create and chown
   var missing_dir = false;
   try { fs.accessSync(instance.env.bwd, fs.F_OK) } catch (e) { missing_dir = true }
@@ -846,6 +891,61 @@ function server_container(server_name, user_config, socket_io) {
 
   intervals['heartbeat'] = setInterval(heartbeat, HEARTBEAT_INTERVAL_MS);
 
+  // Minecraft logs "Done (...)! For help" once it accepts players. Used when
+  // the status ping cannot answer (enable-status=false, server-ip bound to
+  // another address). Reads only the end of the log, and only one written
+  // since the start began.
+  function log_says_ready(since, callback) {
+    var log_path = path.join(instance.env.cwd, 'logs', 'latest.log');
+    fs.stat(log_path, function(err, st) {
+      if (err || !st.isFile() || st.mtimeMs < since) return callback(false);
+      var length = Math.min(st.size, LOG_TAIL_BYTES);
+      fs.open(log_path, 'r', function(open_err, fd) {
+        if (open_err) return callback(false);
+        var buffer = Buffer.alloc(length);
+        fs.read(fd, buffer, 0, length, st.size - length, function(read_err) {
+          fs.close(fd, function() {});
+          callback(!read_err && /Done \(\d/.test(buffer.toString('utf8')));
+        });
+      });
+    });
+  }
+
+  // up: the server process is running. ready: Minecraft accepts players.
+  function readiness(payload, callback) {
+    if (!payload.up) return callback(false);
+    if ((payload.ping || {}).server_version) return callback(true);
+    instance.property('unconventional', function(err, is_unconventional) {
+      if (is_unconventional) return callback(true); // proxies are not pinged
+      if (activity && activity.action == 'start') return log_says_ready(activity.since, callback);
+      callback(true); // already running before this web UI started; nothing to wait for
+    });
+  }
+
+  // starting / stopping while an activity is open, else up / down.
+  function state_of(payload) {
+    if (activity) return activity.action == 'start' ? 'starting' : 'stopping';
+    return payload.up ? 'up' : 'down';
+  }
+
+  // Closes the open activity when the server got where it was going, and says
+  // which event, if any, browsers should announce.
+  function settle_activity(payload) {
+    if (!activity || activity.action != 'start' || !activity.fin) return null;
+    var now = Date.now();
+    if (payload.ready) {
+      activity = null;
+      return 'ready';
+    }
+    if (!payload.up && now - activity.fin_at > STARTED_FAILED_GRACE_MS) {
+      activity = null;
+      return 'start_failed';
+    }
+    if (now - activity.since > READY_TIMEOUT_MS)
+      activity = null; // up, but it never said so; stop showing "starting"
+    return null;
+  }
+
   // The server's live status: whether it is up, its memory, ping and query.
   function collect_heartbeat(callback) {
     async.parallel({
@@ -868,10 +968,14 @@ function server_container(server_name, user_config, socket_io) {
         })
       }
     }, function(err, retval) {
-      callback({
-        'server_name': server_name,
-        'timestamp': Date.now(),
-        'payload': retval
+      readiness(retval, function(is_ready) {
+        retval.ready = is_ready;
+        retval.state = state_of(retval);
+        callback({
+          'server_name': server_name,
+          'timestamp': Date.now(),
+          'payload': retval
+        });
       });
     })
   }
@@ -883,7 +987,11 @@ function server_container(server_name, user_config, socket_io) {
     collect_heartbeat(function(status) {
       clearInterval(intervals['heartbeat']);
       intervals['heartbeat'] = setInterval(heartbeat, HEARTBEAT_INTERVAL_MS);
+      var event = settle_activity(status.payload);
+      status.payload.state = state_of(status.payload);
       nsp.emit('heartbeat', status);
+      if (event)
+        nsp.emit('server_event', { 'server_name': server_name, 'event': event, 'timestamp': Date.now() });
     })
   }
 

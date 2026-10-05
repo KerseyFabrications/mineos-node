@@ -537,17 +537,25 @@ app.controller("Webui", ['$scope', 'socket', 'ServerService', '$filter', '$trans
     $translate.use(locale);
   }
 
-  // Commands that take a while: show progress from the click until the server
-  // reaches the requested state (see server_model.transition).
-  var TRANSITION_COMMANDS = { start: 'STARTING', restart: 'STARTING', stop: 'STOPPING' };
+  // Commands that take a while. The server reports their progress in the
+  // heartbeat (state: starting or stopping) to every browser; the click itself
+  // gets a notice so nothing looks frozen before that first update arrives.
+  var PROGRESS_COMMANDS = {
+    start: ['STARTING', 'STARTING_NOTICE'],
+    restart: ['STARTING', 'STARTING_NOTICE'],
+    stop: ['STOPPING', 'STOPPING_NOTICE'],
+    stop_and_backup: ['STOPPING', 'STOPPING_NOTICE'],
+    kill: ['STOPPING', 'KILL_NOTICE']
+  };
 
   $scope.server_command = function(cmd, args) {
     var instance = $scope.servers[$scope.current];
-    if (instance && cmd in TRANSITION_COMMANDS) {
-      instance.transition = { action: cmd, since: Date.now(), fin: false };
+    if (instance && cmd in PROGRESS_COMMANDS) {
+      if (!instance.can(cmd)) return;
+      instance.pending = { command: cmd, at: Date.now() };
       $.gritter.add({
-        title: "[{0}] {1}".format(instance.server_name, $filter('translate')(TRANSITION_COMMANDS[cmd])),
-        text: $filter('translate')(cmd == 'stop' ? 'STOPPING_NOTICE' : 'STARTING_NOTICE')
+        title: "[{0}] {1}".format(instance.server_name, $filter('translate')(PROGRESS_COMMANDS[cmd][0])),
+        text: $filter('translate')(PROGRESS_COMMANDS[cmd][1])
       });
     }
 
@@ -866,10 +874,9 @@ app.factory('ServerService', ['socket', '$filter', function(socket, $filter) {
     var me = this;
     me.server_name = server_name;
     me.channel = socket;
-    // A start, restart or stop the user is waiting on:
-    // {action, since (ms), fin (the command has answered)}
-    me.transition = null;
-    var TRANSITION_TIMEOUT_MS = 15 * 60 * 1000;
+    // A start or stop this browser asked for, shown until the server's next
+    // status update says what is happening (see server_command).
+    me.pending = null;
     me.page_data = {};
     me.increments = [];
     me.archives = [];
@@ -890,64 +897,71 @@ app.factory('ServerService', ['socket', '$filter', function(socket, $filter) {
         me.auto_rate_counter = 0;
     }, 1000 * me.AUTO_RATE_SUSTAINED_DURATION);
 
-    // Up and answering players: the process alone is up for a while (often a
-    // minute or more for modded servers) before Minecraft accepts connections.
-    // Unconventional servers are not pinged, so their process being up counts.
-    me.is_ready = function() {
-      var hb = me.heartbeat || {};
-      if (!hb.up) return false;
-      return !!((hb.ping || {}).server_version || ((me.sc || {}).minecraft || {}).unconventional);
+    // up, down, starting or stopping. The server decides (it knows about
+    // starts from cron, boot and other browsers too); a click shows its effect
+    // until the server's answer arrives.
+    me.state = function() {
+      if (me.pending)
+        return (me.pending.command == 'start' || me.pending.command == 'restart') ? 'starting' : 'stopping';
+      var hb = me.heartbeat;
+      if (!hb) return '';
+      if (hb.state) return hb.state;
+      return hb.up ? 'up' : 'down';
     }
 
-    // What the status display shows: UP, STARTING, STOPPING or DOWN.
+    // The translation key for the state: UP, DOWN, STARTING or STOPPING.
     me.status = function() {
-      if (me.transition) return me.transition.action == 'stop' ? 'STOPPING' : 'STARTING';
-      if (!me.heartbeat) return '';
-      return me.heartbeat.up ? 'UP' : 'DOWN';
+      return me.state().toUpperCase();
     }
 
-    function settle_transition() {
-      var t = me.transition;
-      if (!t) return;
-      // A server with status pings turned off (enable-status=false) never
-      // reports ready; stop waiting for it eventually.
-      if (Date.now() - t.since > TRANSITION_TIMEOUT_MS) {
-        me.transition = null;
-        return;
-      }
-
-      if (t.action == 'stop') {
-        if (!me.heartbeat.up) me.transition = null; // the DOWN notice below reports it
-        return;
-      }
-      // start and restart answer once the new process is launched (restart
-      // after the old one has stopped), so readiness now means the new one.
-      if (!t.fin) return;
-      if (me.is_ready()) {
-        me.transition = null;
-        $.gritter.add({
-          title: "[{0}] {1}".format(me.server_name, $filter('translate')('UP')),
-          text: $filter('translate')('READY_NOTICE')
-        });
-      } else if (!me.heartbeat.up && Date.now() - t.since > 15000) {
-        me.transition = null;
-        $.gritter.add({
-          title: "[{0}] {1}".format(me.server_name, $filter('translate')('DOWN')),
-          text: $filter('translate')('START_ABORTED_NOTICE')
-        });
-      }
+    // Whether a command makes sense now. Stop is allowed while starting, so a
+    // start can be called off; restart and stop & backup need a running server.
+    me.can = function(cmd) {
+      var state = me.state();
+      if (cmd == 'start') return state == 'down';
+      if (cmd == 'stop') return state == 'up' || state == 'starting';
+      if (cmd == 'kill') return state == 'up' || state == 'starting' || state == 'stopping';
+      return state == 'up';
     }
 
     me.channel.on(server_name, 'heartbeat', function(data) {
-      var previous_state = me.heartbeat;
+      var previous = me.heartbeat || {};
       me.heartbeat = data.payload;
-      settle_transition();
 
-      if ((previous_state || {}).up == true && me.heartbeat.up == false && !(me.transition || {}).action) {
+      // Keep showing the click's effect until the server reports the command
+      // under way (or finished), so an update collected just before the click
+      // does not flip the status back for a moment.
+      if (me.pending) {
+        var state = me.heartbeat.state;
+        var starting = me.pending.command == 'start';
+        var moved = starting ? (state == 'starting' || state == 'up') : (state == 'stopping' || state == 'down');
+        if (moved || !state || Date.now() - me.pending.at > 10000)
+          me.pending = null;
+      }
+
+      // A start that fails is announced by server_event instead.
+      if (previous.up == true && me.heartbeat.up == false && previous.state != 'starting') {
         me.refresh_glance();
         $.gritter.add({
           title: "[{0}] {1}".format(me.server_name, $filter('translate')('DOWN') ),
           text: ''
+        });
+      }
+    })
+
+    me.channel.on(server_name, 'server_event', function(data) {
+      if (data.event == 'ready')
+        $.gritter.add({
+          title: "[{0}] {1}".format(me.server_name, $filter('translate')('UP')),
+          text: $filter('translate')('READY_NOTICE'),
+          sticky: true
+        });
+      else if (data.event == 'start_failed') {
+        me.refresh_glance();
+        $.gritter.add({
+          title: "[{0}] {1}".format(me.server_name, $filter('translate')('DOWN')),
+          text: $filter('translate')('START_ABORTED_NOTICE'),
+          sticky: true
         });
       }
     })
@@ -1019,10 +1033,8 @@ app.factory('ServerService', ['socket', '$filter', function(socket, $filter) {
     })
 
     me.channel.on(server_name, 'server_fin', function(data) {
-      if (me.transition && data.command == me.transition.action) {
-        if (data.success) me.transition.fin = true;
-        else if (data.command != 'stop') me.transition = null; // the failure notice below explains why
-      }
+      if (!data.success && data.command in PROGRESS_COMMANDS)
+        me.pending = null; // the failure notice below explains why
 
       me.notices[data.uuid] = data;
       me.latest_notice[data.command] = data;

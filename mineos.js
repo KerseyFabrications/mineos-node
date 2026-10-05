@@ -963,7 +963,7 @@ mineos.mc = function (server_name, base_dir) {
             },
             function (ignored_err) {
               if (self.server_name in mineos.server_pids_up())
-                cb(true); //error, stop did not succeed
+                cb("stop_timeout"); // still running when the wait ran out
               else cb(null); //no error, stop succeeded as expected
             },
           );
