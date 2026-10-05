@@ -51,6 +51,8 @@ mineos.server_list_up = function () {
   return Object.keys(mineos.server_pids_up());
 };
 
+mineos.SCREEN_REGEX = /\bscreen\s+-[a-z]*S[a-z]*\s+mc-(\S+)/i;
+
 mineos.server_pids_up = function () {
   var cmdline, environ, match;
   var pids = fs.readdirSync(PROC_PATH).filter(function (e) {
@@ -58,7 +60,9 @@ mineos.server_pids_up = function () {
       return e;
     }
   });
-  var SCREEN_REGEX = /screen[^S]+S mc-([^\s]+)/i;
+  // Matches the screen session MineOS starts, "SCREEN -dmS mc-<name>" or
+  // "SCREEN -dmSL mc-<name>" (with logging), whatever other flags it carries.
+  var SCREEN_REGEX = mineos.SCREEN_REGEX;
   var JAVA_REGEX = /\.mc-([^\s]+)/i;
   var servers_found = {};
 
