@@ -1673,7 +1673,9 @@ mineos.mc = function (server_name, base_dir) {
         break;
       case "java_version_in_use":
         self.sc(function (err, dict) {
-          java.usedJavaVersion(self.env.cwd, dict || {}, callback);
+          self.property("owner", function (owner_err, owner) {
+            java.usedJavaVersion(self.env.cwd, dict || {}, owner_err ? null : owner, callback);
+          });
         });
 
         break;

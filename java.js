@@ -76,18 +76,37 @@ function minecraftFromJarName(jarfile) {
   return null;
 }
 
+// The web UI runs as root and reads a jar the server's owner controls, so
+// only read a regular file of plausible size, and only a small version.json.
+var JAR_MAX_BYTES = 512 * 1024 * 1024;
+var VERSION_JSON_MAX_BYTES = 64 * 1024;
+var jar_cache = {}; // jar path -> {mtimeMs, size, major}
+
 // Java major a vanilla (or bundler) server jar declares in its version.json.
+// The result is cached until the jar changes: reading a jar loads all of it.
 function requiredJavaFromJar(jar_path) {
+  var st;
   try {
-    var AdmZip = require("adm-zip");
-    var entry = new AdmZip(jar_path).getEntry("version.json");
-    if (!entry) return null;
-    var info = JSON.parse(entry.getData().toString("utf8"));
-    var major = parseInt(info.java_version, 10);
-    return isNaN(major) ? null : major;
+    st = fs.lstatSync(jar_path);
   } catch (e) {
     return null;
   }
+  if (!st.isFile() || st.size > JAR_MAX_BYTES) return null;
+
+  var cached = jar_cache[jar_path];
+  if (cached && cached.mtimeMs == st.mtimeMs && cached.size == st.size) return cached.major;
+
+  var major = null;
+  try {
+    var AdmZip = require("adm-zip");
+    var entry = new AdmZip(jar_path).getEntry("version.json");
+    if (entry && entry.header.size <= VERSION_JSON_MAX_BYTES) {
+      var parsed = parseInt(JSON.parse(entry.getData().toString("utf8")).java_version, 10);
+      major = isNaN(parsed) ? null : parsed;
+    }
+  } catch (e) {}
+  jar_cache[jar_path] = { mtimeMs: st.mtimeMs, size: st.size, major: major };
+  return major;
 }
 
 function listDir(dir) {
@@ -231,18 +250,39 @@ function resolveJava(cwd, sc, callback) {
   callback(null, { binary: fallback, source: "default", required: required, minecraft: minecraft });
 }
 
+var VERSION_TIMEOUT_MS = 5000;
+var version_cache = {}; // real binary path -> {mtimeMs, version}
+
 // The Java version string a server will run with, for the web UI.
-function usedJavaVersion(cwd, sc, callback) {
+//
+// A configured java_binary is chosen by whoever can edit server.config, so it
+// runs as the server's owner (the same user the server itself runs as), never
+// as root, and is killed if it does not answer in time. owner is {uid, gid}.
+function usedJavaVersion(cwd, sc, owner, callback) {
   resolveJava(cwd, sc, function (err, result) {
     if (err) return callback(null, err);
+    if (!owner || owner.uid === undefined) return callback(null, "unknown");
+
+    var real, st;
     try {
-      var out = child_process.spawnSync(result.binary, ["-version"]);
-      var text = (out.stderr || "").toString() + (out.stdout || "").toString();
-      var m = /version "([^"]+)"/.exec(text);
-      callback(null, m ? m[1] : `unknown (${result.binary})`);
+      real = fs.realpathSync(result.binary);
+      st = fs.statSync(real);
     } catch (e) {
-      callback(null, `Error running '${result.binary}'`);
+      return callback(null, `Error accessing '${result.binary}'`);
     }
+    var cached = version_cache[real];
+    if (cached && cached.mtimeMs == st.mtimeMs) return callback(null, cached.version);
+
+    var opts = { cwd: cwd, uid: owner.uid, gid: owner.gid, timeout: VERSION_TIMEOUT_MS, killSignal: "SIGKILL" };
+    child_process.execFile(result.binary, ["-version"], opts, function (exec_err, stdout, stderr) {
+      var m = /version "([^"]+)"/.exec(String(stderr || "") + String(stdout || ""));
+      if (m) {
+        version_cache[real] = { mtimeMs: st.mtimeMs, version: m[1] };
+        return callback(null, m[1]);
+      }
+      if (exec_err && exec_err.killed) return callback(null, `'${result.binary}' did not answer in time`);
+      callback(null, `unknown (${result.binary})`);
+    });
   });
 }
 

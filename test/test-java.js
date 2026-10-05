@@ -157,3 +157,31 @@ test.profile_outranks_stale_libraries = function (t) {
     t.done();
   });
 };
+
+test.required_java_from_jar_refuses_non_files = function (t) {
+  var dir = fs.mkdtempSync(path.join(os.tmpdir(), "mineos-java-"));
+  fs.symlinkSync("/dev/zero", path.join(dir, "server.jar"));
+  t.equal(java.requiredJavaFromJar(path.join(dir, "server.jar")), null, "a symlink is not read");
+  fs.mkdirSync(path.join(dir, "dir.jar"));
+  t.equal(java.requiredJavaFromJar(path.join(dir, "dir.jar")), null, "a directory is not read");
+  fs.rmSync(dir, { recursive: true, force: true });
+  t.done();
+};
+
+test.used_java_version_runs_as_owner = function (t) {
+  var dir = fs.mkdtempSync(path.join(os.tmpdir(), "mineos-java-"));
+  var fake = path.join(dir, "fakejava");
+  // prints the uid it runs as inside the version string
+  fs.writeFileSync(fake, '#!/bin/sh\necho "openjdk version \\"uid-$(id -u)\\"" >&2\n');
+  fs.chmodSync(fake, 0o755);
+  var sc = { java: { java_binary: fake } };
+  java.usedJavaVersion(dir, sc, null, function (err, unknown) {
+    t.equal(unknown, "unknown", "without an owner nothing is run");
+    var me = { uid: process.getuid(), gid: process.getgid() };
+    java.usedJavaVersion(dir, sc, me, function (err2, version) {
+      t.equal(version, "uid-" + process.getuid());
+      fs.rmSync(dir, { recursive: true, force: true });
+      t.done();
+    });
+  });
+};
