@@ -1,7 +1,11 @@
 # Pinned by digest so every build starts from the same base; Dependabot
 # proposes updates.
 FROM ubuntu:26.04@sha256:f144425ff09be612d6d9ad965196e9cdc23dae1f42110a8a11a3e9a8198759f7
-LABEL MAINTAINER='William Dizon <wdchromium@gmail.com>'
+LABEL org.opencontainers.image.title="MineOS" \
+      org.opencontainers.image.description="Minecraft server manager and web user interface" \
+      org.opencontainers.image.authors="William Dizon (original author); Kris Kersey (Kersey Fabrications)" \
+      org.opencontainers.image.source="https://github.com/KerseyFabrications/mineos-node" \
+      org.opencontainers.image.licenses="GPL-3.0-only"
 
 #update and accept all prompts
 ENV DEBIAN_FRONTEND=noninteractive

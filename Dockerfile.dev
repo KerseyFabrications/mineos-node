@@ -1,6 +1,10 @@
 ARG NODESOURCE_KEY_FPR=6F71F525282841EEDAF851B42F59B5F99B1BE0B4
 FROM ubuntu:26.04@sha256:f144425ff09be612d6d9ad965196e9cdc23dae1f42110a8a11a3e9a8198759f7 AS build
-LABEL MAINTAINER='William Dizon <wdchromium@gmail.com>'
+LABEL org.opencontainers.image.title="MineOS" \
+      org.opencontainers.image.description="Minecraft server manager and web user interface" \
+      org.opencontainers.image.authors="William Dizon (original author); Kris Kersey (Kersey Fabrications)" \
+      org.opencontainers.image.source="https://github.com/KerseyFabrications/mineos-node" \
+      org.opencontainers.image.licenses="GPL-3.0-only"
 
 #set build directory
 WORKDIR /build
