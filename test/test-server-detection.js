@@ -14,6 +14,7 @@ test.screen_regex = function (t) {
   t.equal(name("screen -dmSL mc-a.b_c ./Cuberite"), "a.b_c");
   t.equal(name("/usr/bin/screen -r mc-TestWorld"), null);
   t.equal(name("java -jar screen.jar"), null);
+  t.equal(name("screen -S mc-TestWorld -p 0 -X eval stuff \"save-all\\\\012\""), null, "a console command is not the session");
   t.done();
 };
 

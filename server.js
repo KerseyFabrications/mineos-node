@@ -1087,16 +1087,23 @@ function server_container(server_name, user_config, socket_io) {
     })
   }
 
+  // Starts the server if it is set to start on boot. Calls back (err, started);
+  // a server that is not set to, or is already running, is not an error.
   self.onreboot_start = function(callback) {
+    var NOT_ON_BOOT = {};
     async.waterfall([
       async.apply(instance.property, 'onreboot_start'),
       function(autostart, cb) {
-        if (!autostart) return cb('not set to start on boot');
+        if (!autostart) return cb(NOT_ON_BOOT);
         cb();
       },
       async.apply(instance.start)
     ], function(err) {
-      if (err == 'not set to start on boot') return callback(null, false);
+      if (err === NOT_ON_BOOT) return callback(null, false);
+      if (err == '!up') {
+        logging.info('[{0}] Already running at boot'.format(server_name));
+        return callback(null, false);
+      }
       callback(err, !err);
     })
   }

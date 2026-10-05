@@ -1057,10 +1057,16 @@ app.factory('ServerService', ['socket', '$filter', function(socket, $filter) {
         $('#modal_eula').modal('show');
 
       if (!suppress) {
+        // Error codes ("eula", "stop_timeout") have translations; any other
+        // error is a message from the server and is shown as it is.
         var help_text = '';
-        try {
-          help_text = $filter('translate')(data.err);
-        } catch (e) {}
+        if (typeof data.err == 'string' && /^[A-Za-z0-9_.!-]+$/.test(data.err)) {
+          try {
+            help_text = $filter('translate')(data.err);
+          } catch (e) {}
+        } else if (typeof data.err == 'string') {
+          help_text = data.err;
+        }
 
         $.gritter.add({
           title: "[{0}] {1} {2}".format(me.server_name, data.command,

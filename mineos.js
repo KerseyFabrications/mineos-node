@@ -91,7 +91,10 @@ mineos.server_list_up = function () {
   return Object.keys(mineos.server_pids_up());
 };
 
-mineos.SCREEN_REGEX = /\bscreen\s+-[a-z]*S[a-z]*\s+mc-(\S+)/i;
+// The detached screen session MineOS starts a server in, "SCREEN -dmS mc-<name>"
+// or "SCREEN -dmSL mc-<name>" (with logging). A short-lived
+// "screen -S mc-<name> -X eval stuff ..." that sends a console command is not it.
+mineos.SCREEN_REGEX = /\bscreen\s+-dmS[a-z]*\s+mc-(\S+)/i;
 
 mineos.server_pids_up = function () {
   var cmdline, environ, match;
@@ -100,8 +103,6 @@ mineos.server_pids_up = function () {
       return e;
     }
   });
-  // Matches the screen session MineOS starts, "SCREEN -dmS mc-<name>" or
-  // "SCREEN -dmSL mc-<name>" (with logging), whatever other flags it carries.
   var SCREEN_REGEX = mineos.SCREEN_REGEX;
   var JAVA_REGEX = /\.mc-([^\s]+)/i;
   var servers_found = {};
@@ -117,6 +118,9 @@ mineos.server_pids_up = function () {
     }
 
     screen_match = SCREEN_REGEX.exec(cmdline);
+    // Any user can start a screen session with a matching name; only names
+    // MineOS could have created are servers.
+    if (screen_match && !mineos.valid_server_name(screen_match[1])) continue;
 
     if (screen_match) {
       if (screen_match[1] in servers_found) servers_found[screen_match[1]]["screen"] = parseInt(pids[i]);
@@ -133,7 +137,7 @@ mineos.server_pids_up = function () {
 
       java_match = JAVA_REGEX.exec(environ);
 
-      if (java_match) {
+      if (java_match && mineos.valid_server_name(java_match[1])) {
         if (java_match[1] in servers_found) servers_found[java_match[1]]["java"] = parseInt(pids[i]);
         else servers_found[java_match[1]] = { java: parseInt(pids[i]) };
       }
