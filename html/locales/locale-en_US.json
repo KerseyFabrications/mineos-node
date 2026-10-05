@@ -46,7 +46,7 @@
   "DOWN": "Down",
   "STARTING": "Starting",
   "STOPPING": "Stopping",
-  "STARTING_NOTICE": "Starting. Modded servers can take a minute or two.",
+  "STARTING_NOTICE": "This can take a minute or two for modded servers.",
   "STOPPING_NOTICE": "Saving the world and stopping.",
   "READY_NOTICE": "Up and ready for players.",
   "START_ABORTED_NOTICE": "Stopped while starting. Check the server's log.",
