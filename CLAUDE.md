@@ -100,9 +100,11 @@ Java, Node and Ubuntu, and ships a container image people can actually install.
   up, down; `ready` once the server has finished loading). The web UI disables buttons from that,
   so every open browser agrees, and a `server_event` tells it when a start finished or failed.
 - **Two server-name rules.** `valid_server_name` (letters, digits, `_`, `.`) is what new servers
-  must meet and what the create paths enforce. `listable_server_name` (not hidden, no control
-  characters) decides which existing directories are servers, so ones made by hand or another tool
-  still show up and are saved at shutdown.
+  must meet and what the create paths enforce. `listable_server_name` decides which existing
+  directories are servers: printable ASCII without whitespace, `#`, `?`, `%` or `/`, not hidden.
+  It is looser so directories made by hand or another tool still show up and are saved at
+  shutdown, but no looser than what finding a running server allows: the screen session and
+  java process are matched in `/proc` up to the first whitespace, read as ASCII.
 - **rdiff-backup lists increments oldest-first** from 2.1.1 on. `mineos.number_increments` sorts
   them by time and numbers them newest-first (`0B`, `1B`, ...), which is what restore expects.
 - **The container image must build from this repository's source,** never by cloning upstream at

@@ -79,6 +79,10 @@ environment variables (`USER_NAME`, `USER_PASSWORD`, `USER_UID`, `GROUP_NAME`, `
 - **Profile downloads are checked.** Only a profile the server listed can be downloaded, and
   its file name cannot point outside the profiles directory. The NeoForge installer runs as an
   unprivileged user.
+- **Server directories with spaces, non-ASCII letters, or `#`, `?` or `%` in their names are no
+  longer listed.** MineOS never let you create such names, and it could not tell whether a server
+  with one was running, so it could start a second copy on the same world. If you made one by
+  hand, stop it, rename the directory (letters, digits, `_`, `-`, `.`), and it shows up again.
 - **`screenlog.0`** (screen's console log in each server directory) is rotated to `screenlog.1`
   at every start, instead of growing forever.
 - **NeoForge profile.** NeoForge builds, including 26.x, can be downloaded like any other

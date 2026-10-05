@@ -143,8 +143,8 @@ server.backend = function(base_dir, socket_emitter, user_config) {
       //http://stackoverflow.com/a/24594123/1191579
       return fs.readdirSync(server_path).filter(function(p) {
         // New servers get strict names (valid_server_name), but a directory
-        // made by hand or another tool is still a server. Skip only hidden
-        // directories and names with control characters.
+        // made by hand or another tool is still a server, if its name is one
+        // a running server can be recognized by (listable_server_name).
         if (!mineos.listable_server_name(p)) {
           logging.warn("Ignoring directory that cannot be a server name: {0}".format(JSON.stringify(p)));
           return false;
@@ -638,7 +638,7 @@ server.backend = function(base_dir, socket_emitter, user_config) {
             // The archive must be one file in import/ or in one server's archive/.
             function(cb) {
               if (!mineos.valid_server_name(args.new_server_name)) return cb('invalid server name');
-              if (!mineos.valid_profile_part(args.filename) || (args.awd_dir && !mineos.valid_server_name(args.awd_dir)))
+              if (!mineos.valid_profile_part(args.filename) || (args.awd_dir && !(mineos.valid_profile_part(args.awd_dir) && mineos.listable_server_name(args.awd_dir))))
                 return cb('invalid archive path');
               cb();
             },
@@ -774,7 +774,9 @@ function server_container(server_name, user_config, socket_io) {
     instance[command] = function(callback) {
       var previous = activity;
       begin_activity(command);
+      var mine = activity;
       original(function(err) {
+        if (mine) mine.ended = true;
         end_activity(command, err, previous);
         if (typeof callback == 'function')
           callback.apply(null, arguments);
@@ -795,7 +797,7 @@ function server_container(server_name, user_config, socket_io) {
   function end_activity(command, err, previous) {
     if (!activity) return;
     if (command == 'start' && activity.action == 'start') {
-      if (err) activity = (previous && previous.action == 'stop') ? previous : null; // server_fin carries the reason
+      if (err) activity = (previous && previous.action == 'stop' && !previous.ended) ? previous : null; // server_fin carries the reason
       else {
         activity.fin = true;
         activity.fin_at = Date.now();
@@ -959,8 +961,10 @@ function server_container(server_name, user_config, socket_io) {
   function settle_activity(payload, collected_for, collected_at) {
     if (!activity) return null;
     var now = Date.now();
-    if (now - activity.since > READY_TIMEOUT_MS) {
-      activity = null; // a command that never returned, or a server that never said it was ready
+    // A start that never returned, or a server that never said it was ready.
+    // Stops end on their own (the stop timeout), however long a backup takes.
+    if (activity.action == 'start' && now - activity.since > READY_TIMEOUT_MS) {
+      activity = null;
       return null;
     }
     if (activity.action != 'start' || !activity.fin) return null;

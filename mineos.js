@@ -194,11 +194,14 @@ mineos.number_increments = function (entries) {
   });
 };
 
-// A directory under servers/ that can be shown as a server: not hidden, and
-// no control characters. Looser than valid_server_name, which new servers
-// must meet, so servers made by hand or by other tools keep working.
+// A directory under servers/ that can be shown as a server. Looser than
+// valid_server_name, which new servers must meet, so servers made by hand or
+// by other tools keep working; but only names a running server can be found
+// by (its screen session and java process are matched up to whitespace in
+// /proc, read as ASCII) and that work as a socket.io namespace: printable
+// ASCII without whitespace, '#', '?', '%' or '/', and not hidden.
 mineos.listable_server_name = function (name) {
-  return typeof name == "string" && name.length > 0 && name[0] != "." && !/[\x00-\x1f\x7f]/.test(name);
+  return typeof name == "string" && /^(?!\.)[\x21-\x7e]+$/.test(name) && !/[#?%\/]/.test(name);
 };
 
 mineos.valid_server_name = function (server_name) {
