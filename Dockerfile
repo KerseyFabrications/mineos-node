@@ -39,10 +39,10 @@ RUN ARCH="$(dpkg --print-architecture)" \
 #install node 24 from NodeSource's signed apt repository. The repository key is
 #checked against its published fingerprint before apt is told to trust it, so
 #no downloaded script runs as root.
-ARG NODESOURCE_KEY_FPR=6F71F525282841EEDAF851B42F59B5F99B1BE0B4
+ARG NODESOURCE_SIGNER_FPR=6F71F525282841EEDAF851B42F59B5F99B1BE0B4
 RUN apt-get update && apt-get install -y gnupg \
   && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key -o /tmp/nodesource.key \
-  && gpg --show-keys --with-colons /tmp/nodesource.key | grep -q "^fpr:::::::::${NODESOURCE_KEY_FPR}:" \
+  && gpg --show-keys --with-colons /tmp/nodesource.key | grep -q "^fpr:::::::::${NODESOURCE_SIGNER_FPR}:" \
   && gpg --dearmor -o /usr/share/keyrings/nodesource.gpg /tmp/nodesource.key \
   && echo "deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_24.x nodistro main" \
      > /etc/apt/sources.list.d/nodesource.list \
@@ -78,5 +78,5 @@ ENTRYPOINT ["/entrypoint.sh"]
 EXPOSE 8443 25565-25570
 VOLUME /var/games/minecraft
 
-ENV USER_PASSWORD=random_see_log USER_NAME=mc USER_UID=1000 USE_HTTPS=true SERVER_PORT=8443 \
+ENV USER_NAME=mc USER_UID=1000 USE_HTTPS=true SERVER_PORT=8443 \
     MINEOS_SHUTDOWN_TIMEOUT=120
