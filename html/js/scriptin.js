@@ -1,3 +1,18 @@
+// Popup titles and texts carry server names, command names and error text,
+// none of which the page controls. Show them as text, never as HTML.
+(function () {
+  if (!window.jQuery || !jQuery.gritter) return;
+  var add = jQuery.gritter.add;
+  function as_text(value) {
+    return jQuery('<div>').text(value == null ? '' : String(value)).html();
+  }
+  jQuery.gritter.add = function (params) {
+    if (params && typeof params == 'object')
+      params = jQuery.extend({}, params, { title: as_text(params.title), text: as_text(params.text) });
+    return add.call(this, params);
+  };
+})();
+
 var app = angular.module("mineos", ['angularMoment', 'pascalprecht.translate', 'ngSanitize']);
 
 app.config(function ($translateProvider) {

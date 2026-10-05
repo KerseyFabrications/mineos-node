@@ -142,6 +142,13 @@ server.backend = function(base_dir, socket_emitter, user_config) {
     function discover() {
       //http://stackoverflow.com/a/24594123/1191579
       return fs.readdirSync(server_path).filter(function(p) {
+        // A directory name becomes a server name, shown in the web UI and
+        // used in socket.io namespaces and process names: skip any that
+        // MineOS itself would not allow.
+        if (!mineos.valid_server_name(p)) {
+          logging.warn("Ignoring directory with an invalid server name: {0}".format(JSON.stringify(p)));
+          return false;
+        }
         try {
           return fs.statSync(path.join(server_path, p)).isDirectory();
         } catch (e) {
