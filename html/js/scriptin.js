@@ -1,5 +1,6 @@
 // Popup titles and texts carry server names, command names and error text,
-// none of which the page controls. Show them as text, never as HTML.
+// none of which the page controls. Show them as text, never as HTML. Each
+// notice is also read out through a live region, since the popups are not.
 (function () {
   if (!window.jQuery || !jQuery.gritter) return;
   var add = jQuery.gritter.add;
@@ -7,8 +8,10 @@
     return jQuery('<div>').text(value == null ? '' : String(value)).html();
   }
   jQuery.gritter.add = function (params) {
-    if (params && typeof params == 'object')
+    if (params && typeof params == 'object') {
+      jQuery('#notice-announcer').text([params.title, params.text].filter(Boolean).join('. '));
       params = jQuery.extend({}, params, { title: as_text(params.title), text: as_text(params.text) });
+    }
     return add.call(this, params);
   };
 })();
@@ -16,10 +19,14 @@
 // Commands that take a while. The server reports their progress in the
 // heartbeat (state: starting or stopping) to every browser; the click itself
 // gets a notice so nothing looks frozen before that first update arrives.
+// Restart begins by stopping, which is what the server reports first.
 // Used by the controller (the click) and each server's result handler.
+// How long the ready and start-failed notices stay (hovering holds them).
+var NOTICE_LONG_MS = 20000;
+
 var PROGRESS_COMMANDS = {
   start: ['STARTING', 'STARTING_NOTICE'],
-  restart: ['STARTING', 'STARTING_NOTICE'],
+  restart: ['STOPPING', 'RESTARTING_NOTICE'],
   stop: ['STOPPING', 'STOPPING_NOTICE'],
   stop_and_backup: ['STOPPING', 'STOPPING_NOTICE'],
   kill: ['STOPPING', 'KILL_NOTICE']
@@ -903,7 +910,7 @@ app.factory('ServerService', ['socket', '$filter', function(socket, $filter) {
     // until the server's answer arrives.
     me.state = function() {
       if (me.pending)
-        return (me.pending.command == 'start' || me.pending.command == 'restart') ? 'starting' : 'stopping';
+        return me.pending.command == 'start' ? 'starting' : 'stopping';
       var hb = me.heartbeat;
       if (!hb) return '';
       if (hb.state) return hb.state;
@@ -963,14 +970,14 @@ app.factory('ServerService', ['socket', '$filter', function(socket, $filter) {
         $.gritter.add({
           title: "[{0}] {1}".format(me.server_name, $filter('translate')('UP')),
           text: $filter('translate')('READY_NOTICE'),
-          sticky: true
+          time: NOTICE_LONG_MS
         });
       else if (data.event == 'start_failed') {
         me.refresh_glance();
         $.gritter.add({
           title: "[{0}] {1}".format(me.server_name, $filter('translate')('DOWN')),
           text: $filter('translate')('START_ABORTED_NOTICE'),
-          sticky: true
+          time: NOTICE_LONG_MS
         });
       }
     })

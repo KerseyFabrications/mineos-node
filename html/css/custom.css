@@ -103,3 +103,23 @@ button.control_centering {
     color: #3a2300;
     text-shadow: none;
 }
+
+/* Status labels and badges: white text needs darker green and red than the
+   theme's to be readable (4.5:1). */
+.label-success,
+.badge-success { background-color: #2e7d32; }
+.label-important,
+.badge-important { background-color: #c62828; }
+
+/* Text only screen readers see (announced notices). */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}

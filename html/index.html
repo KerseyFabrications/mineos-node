@@ -43,6 +43,7 @@
     <!--/ END JAVASCRIPT SECTION -->
 </head>
 <body ng-controller="Webui">
+    <div id="notice-announcer" class="sr-only" role="status" aria-live="polite"></div>
     <!-- START Template Wrapper -->
     <!-- If you want to enable the fixed sidebar or fixed header, just add `.fixed-sidebar` or `.fixed-header` class to the `#wrapper` div below -->
     <!-- IMPORTANT! : fixed sidebar will automatically add `.fixed-header` class to the `#wrapper` div -->
@@ -811,7 +812,7 @@
                                                     <figure class="stats summary stacked">
                                                         <div class="icon circle" ng-class="{green: servers[current].status() == 'UP', orange: servers[current].status() == 'STARTING' || servers[current].status() == 'STOPPING', red: servers[current].status() == 'DOWN'}"><span aria-hidden="true" ng-class="{'icone-ok': servers[current].status() == 'UP', 'icone-time': servers[current].status() == 'STARTING' || servers[current].status() == 'STOPPING', 'icone-remove': servers[current].status() == 'DOWN'}"></span></div>
                                                         <figcaption>
-                                                            <h4 role="status" aria-live="polite">{{ servers[current].status() | translate }}<small translate="SERVER_STATUS"></small></h4>
+                                                            <h4><span role="status" aria-live="polite" aria-atomic="true">{{ servers[current].status() | translate }}</span><small translate="SERVER_STATUS"></small></h4>
                                                         </figcaption>
                                                     </figure><!--/ END Summary -->
 
@@ -866,7 +867,7 @@
                                                 <div class="body-inner">
 
                                                     <div class="span4">
-                                                        <button type="button" class="btn btn-success span12" ng-disabled="!servers[current].can('start') || !valid_server_name(current)" title="{{ servers[current].unavailable_reason('start') | translate }}" ng-click="server_command('start')" translate="START" ng-show="(servers[current].sc.java.jarfile && servers[current].sc.java.java_xmx)"></button>
+                                                        <button type="button" class="btn btn-success span12" ng-disabled="!servers[current].can('start') || !valid_server_name(current)" title="{{ servers[current].unavailable_reason('start') | translate }}" aria-describedby="server-actions-hint" ng-click="server_command('start')" translate="START" ng-show="(servers[current].sc.java.jarfile && servers[current].sc.java.java_xmx)"></button>
                                                         <button type="button" class="btn btn-success span12" ng-disabled="servers[current].heartbeat.up || !valid_server_name(current)" ng-click="modals.open_new_server()" translate="START" ng-show="!(servers[current].sc.java.jarfile && servers[current].sc.java.java_xmx)"></button>
                                                     </div>
 
@@ -875,16 +876,18 @@
                                                             <button class="btn btn-danger span6" translate="STOP"
                                                                     ng-disabled="!servers[current].can('stop')"
                                                                     title="{{ servers[current].unavailable_reason('stop') | translate }}"
+                                                                    aria-describedby="server-actions-hint"
                                                                     ng-click="server_command('stop')"
                                                                     ng-hide="servers[current].sc.minecraft.unconventional"
                                                                     ></button>
                                                             <button class="btn btn-danger span6" translate="KILL"
                                                                     ng-disabled="!servers[current].can('kill')"
                                                                     title="{{ servers[current].unavailable_reason('kill') | translate }}"
+                                                                    aria-describedby="server-actions-hint"
                                                                     ng-click="server_command('kill')" 
                                                                     ng-hide="!servers[current].sc.minecraft.unconventional"
                                                                     ></button>
-                                                            <button class="btn btn-danger dropdown-toggle" data-toggle="dropdown"><span class="caret"></span></button>
+                                                            <button class="btn btn-danger dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-label="{{ 'MORE_ACTIONS' | translate }}"><span class="caret"></span></button>
                                                             <ul class="dropdown-menu">
                                                                 <li ng-class="{disabled: !servers[current].can('stop')}"><a href="#" translate="STOP"
                                                                        ng-attr-aria-disabled="{{ !servers[current].can('stop') || undefined }}"
@@ -934,6 +937,7 @@
                                                     </div>
 
                                                     <div class="clearfix"></div><div class="span12"></div>
+                                                    <p id="server-actions-hint" class="muted" ng-show="servers[current].status() == 'STARTING' || servers[current].status() == 'STOPPING'">{{ 'UNAVAILABLE_' + servers[current].status() | translate }}</p>
 
                                                     <!-- Select -->
                                                     <div class="control-group">
