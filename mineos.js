@@ -118,9 +118,9 @@ mineos.server_pids_up = function () {
     }
 
     screen_match = SCREEN_REGEX.exec(cmdline);
-    // Any user can start a screen session with a matching name; only names
-    // MineOS could have created are servers.
-    if (screen_match && !mineos.valid_server_name(screen_match[1])) continue;
+    // Only names that can be servers count (no hidden or control-character
+    // names).
+    if (screen_match && !mineos.listable_server_name(screen_match[1])) continue;
 
     if (screen_match) {
       if (screen_match[1] in servers_found) servers_found[screen_match[1]]["screen"] = parseInt(pids[i]);
@@ -137,7 +137,7 @@ mineos.server_pids_up = function () {
 
       java_match = JAVA_REGEX.exec(environ);
 
-      if (java_match && mineos.valid_server_name(java_match[1])) {
+      if (java_match && mineos.listable_server_name(java_match[1])) {
         if (java_match[1] in servers_found) servers_found[java_match[1]]["java"] = parseInt(pids[i]);
         else servers_found[java_match[1]] = { java: parseInt(pids[i]) };
       }
@@ -192,6 +192,13 @@ mineos.number_increments = function (entries) {
     d.entry.step = "{0}B".format(i);
     return d.entry;
   });
+};
+
+// A directory under servers/ that can be shown as a server: not hidden, and
+// no control characters. Looser than valid_server_name, which new servers
+// must meet, so servers made by hand or by other tools keep working.
+mineos.listable_server_name = function (name) {
+  return typeof name == "string" && name.length > 0 && name[0] != "." && !/[\x00-\x1f\x7f]/.test(name);
 };
 
 mineos.valid_server_name = function (server_name) {

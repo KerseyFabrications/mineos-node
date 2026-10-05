@@ -142,11 +142,11 @@ server.backend = function(base_dir, socket_emitter, user_config) {
     function discover() {
       //http://stackoverflow.com/a/24594123/1191579
       return fs.readdirSync(server_path).filter(function(p) {
-        // A directory name becomes a server name, shown in the web UI and
-        // used in socket.io namespaces and process names: skip any that
-        // MineOS itself would not allow.
-        if (!mineos.valid_server_name(p)) {
-          logging.warn("Ignoring directory with an invalid server name: {0}".format(JSON.stringify(p)));
+        // New servers get strict names (valid_server_name), but a directory
+        // made by hand or another tool is still a server. Skip only hidden
+        // directories and names with control characters.
+        if (!mineos.listable_server_name(p)) {
+          logging.warn("Ignoring directory that cannot be a server name: {0}".format(JSON.stringify(p)));
           return false;
         }
         try {
@@ -222,11 +222,13 @@ server.backend = function(base_dir, socket_emitter, user_config) {
       Object.keys(self.servers),
       1,
       function(server_name, callback) {
-        self.servers[server_name].onreboot_start(function(err, started) {
+        self.servers[server_name].onreboot_start(function(err, started, why_not) {
           if (err)
             logging.error('[{0}] Could not start on boot:'.format(server_name), err);
           else if (started)
             logging.info('[{0}] Started on boot. Waiting {1} ms...'.format(server_name, MS_TO_PAUSE));
+          else if (why_not == 'already running')
+            logging.info('[{0}] Already running at boot'.format(server_name));
           else
             logging.info('[{0}] Not set to start on boot'.format(server_name));
 
@@ -367,6 +369,7 @@ server.backend = function(base_dir, socket_emitter, user_config) {
           var instance = new mineos.mc(args.server_name, base_dir);
 
           async.series([
+            function(cb) { cb(mineos.valid_server_name(args.server_name) ? null : 'invalid server name') },
             async.apply(instance.verify, '!exists'),
             function(cb) {
               var whitelisted_creators = [username]; //by default, accept create attempt by current user
@@ -394,6 +397,7 @@ server.backend = function(base_dir, socket_emitter, user_config) {
           var instance = new mineos.mc(args.server_name, base_dir);
 
           async.series([
+            function(cb) { cb(mineos.valid_server_name(args.server_name) ? null : 'invalid server name') },
             async.apply(instance.verify, '!exists'),
             async.apply(instance.create_unconventional_server, OWNER_CREDS),
           ], function(err, results) {
@@ -626,11 +630,18 @@ server.backend = function(base_dir, socket_emitter, user_config) {
           var instance = new mineos.mc(args.new_server_name, base_dir);
 
           if (args.awd_dir)
-            var filepath = path.join(instance.env.base_dir, mineos.DIRS['archive'], args.awd_dir, args.filename);
+            var filepath = path.join(instance.env.base_dir, mineos.DIRS['archive'], String(args.awd_dir), String(args.filename));
           else
-            var filepath = path.join(instance.env.base_dir, mineos.DIRS['import'], args.filename);
+            var filepath = path.join(instance.env.base_dir, mineos.DIRS['import'], String(args.filename));
 
           async.series([
+            // The archive must be one file in import/ or in one server's archive/.
+            function(cb) {
+              if (!mineos.valid_server_name(args.new_server_name)) return cb('invalid server name');
+              if (!mineos.valid_profile_part(args.filename) || (args.awd_dir && !mineos.valid_server_name(args.awd_dir)))
+                return cb('invalid archive path');
+              cb();
+            },
             async.apply(instance.verify, '!exists'),
             async.apply(instance.create_from_archive, OWNER_CREDS, filepath)
           ], function(err, results) {
@@ -761,9 +772,10 @@ function server_container(server_name, user_config, socket_io) {
   ['start', 'restart', 'stop', 'stop_and_backup', 'kill'].forEach(function(command) {
     var original = instance[command];
     instance[command] = function(callback) {
+      var previous = activity;
       begin_activity(command);
       original(function(err) {
-        end_activity(command, err);
+        end_activity(command, err, previous);
         if (typeof callback == 'function')
           callback.apply(null, arguments);
       });
@@ -778,10 +790,12 @@ function server_container(server_name, user_config, socket_io) {
     heartbeat();
   }
 
-  function end_activity(command, err) {
+  // previous: the activity open when this command began. A start refused
+  // because a stop is still running ('!up') leaves that stop showing.
+  function end_activity(command, err, previous) {
     if (!activity) return;
     if (command == 'start' && activity.action == 'start') {
-      if (err) activity = null; // server_fin carries the reason
+      if (err) activity = (previous && previous.action == 'stop') ? previous : null; // server_fin carries the reason
       else {
         activity.fin = true;
         activity.fin_at = Date.now();
@@ -897,11 +911,17 @@ function server_container(server_name, user_config, socket_io) {
   // since the start began.
   function log_says_ready(since, callback) {
     var log_path = path.join(instance.env.cwd, 'logs', 'latest.log');
-    fs.stat(log_path, function(err, st) {
-      if (err || !st.isFile() || st.mtimeMs < since) return callback(false);
-      var length = Math.min(st.size, LOG_TAIL_BYTES);
-      fs.open(log_path, 'r', function(open_err, fd) {
-        if (open_err) return callback(false);
+    // The log belongs to the server's owner: open it without following a
+    // symlink or blocking on a FIFO, and check what was opened.
+    var flags = fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK;
+    fs.open(log_path, flags, function(open_err, fd) {
+      if (open_err) return callback(false);
+      fs.fstat(fd, function(err, st) {
+        if (err || !st.isFile() || st.mtimeMs < since) {
+          fs.close(fd, function() {});
+          return callback(false);
+        }
+        var length = Math.min(st.size, LOG_TAIL_BYTES);
         var buffer = Buffer.alloc(length);
         fs.read(fd, buffer, 0, length, st.size - length, function(read_err) {
           fs.close(fd, function() {});
@@ -915,8 +935,11 @@ function server_container(server_name, user_config, socket_io) {
   function readiness(payload, callback) {
     if (!payload.up) return callback(false);
     if ((payload.ping || {}).server_version) return callback(true);
-    instance.property('unconventional', function(err, is_unconventional) {
-      if (is_unconventional) return callback(true); // proxies are not pinged
+    instance.sc(function(sc_err, sc) {
+      var jarfile = String(((sc || {}).java || {}).jarfile || '');
+      // proxies are not pinged, and PocketMine (.phar) neither answers the
+      // ping nor writes logs/latest.log
+      if (((sc || {}).minecraft || {}).unconventional || /\.phar$/i.test(jarfile)) return callback(true);
       if (activity && activity.action == 'start') return log_says_ready(activity.since, callback);
       callback(true); // already running before this web UI started; nothing to wait for
     });
@@ -930,9 +953,18 @@ function server_container(server_name, user_config, socket_io) {
 
   // Closes the open activity when the server got where it was going, and says
   // which event, if any, browsers should announce.
-  function settle_activity(payload) {
-    if (!activity || activity.action != 'start' || !activity.fin) return null;
+  // collected_for / collected_at: the activity open when this heartbeat began
+  // collecting, and when. A slow heartbeat begun before the start returned (or
+  // for another activity) describes the old process, so it settles nothing.
+  function settle_activity(payload, collected_for, collected_at) {
+    if (!activity) return null;
     var now = Date.now();
+    if (now - activity.since > READY_TIMEOUT_MS) {
+      activity = null; // a command that never returned, or a server that never said it was ready
+      return null;
+    }
+    if (activity.action != 'start' || !activity.fin) return null;
+    if (collected_for !== activity || collected_at < activity.fin_at) return null;
     if (payload.ready) {
       activity = null;
       return 'ready';
@@ -941,8 +973,6 @@ function server_container(server_name, user_config, socket_io) {
       activity = null;
       return 'start_failed';
     }
-    if (now - activity.since > READY_TIMEOUT_MS)
-      activity = null; // up, but it never said so; stop showing "starting"
     return null;
   }
 
@@ -984,10 +1014,11 @@ function server_container(server_name, user_config, socket_io) {
     clearInterval(intervals['heartbeat']);
     intervals['heartbeat'] = setInterval(heartbeat, HEARTBEAT_INTERVAL_MS * 3);
 
+    var collected_for = activity, collected_at = Date.now();
     collect_heartbeat(function(status) {
       clearInterval(intervals['heartbeat']);
       intervals['heartbeat'] = setInterval(heartbeat, HEARTBEAT_INTERVAL_MS);
-      var event = settle_activity(status.payload);
+      var event = settle_activity(status.payload, collected_for, collected_at);
       status.payload.state = state_of(status.payload);
       nsp.emit('heartbeat', status);
       if (event)
@@ -1087,8 +1118,8 @@ function server_container(server_name, user_config, socket_io) {
     })
   }
 
-  // Starts the server if it is set to start on boot. Calls back (err, started);
-  // a server that is not set to, or is already running, is not an error.
+  // Starts the server if it is set to start on boot. Calls back (err, started,
+  // why_not); a server that is not set to, or is already running, is not an error.
   self.onreboot_start = function(callback) {
     var NOT_ON_BOOT = {};
     async.waterfall([
@@ -1100,10 +1131,7 @@ function server_container(server_name, user_config, socket_io) {
       async.apply(instance.start)
     ], function(err) {
       if (err === NOT_ON_BOOT) return callback(null, false);
-      if (err == '!up') {
-        logging.info('[{0}] Already running at boot'.format(server_name));
-        return callback(null, false);
-      }
+      if (err == '!up') return callback(null, false, 'already running');
       callback(err, !err);
     })
   }

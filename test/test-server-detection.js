@@ -29,3 +29,14 @@ test.valid_profile_part = function (t) {
   t.ok(!mineos.valid_profile_part(undefined));
   t.done();
 };
+
+test.listable_server_name = function (t) {
+  t.ok(mineos.listable_server_name("survival-1"), "made by hand or another tool");
+  t.ok(mineos.listable_server_name("My World"));
+  t.ok(mineos.listable_server_name("CardboardCraft_7"));
+  t.ok(!mineos.listable_server_name(".hidden"));
+  t.ok(!mineos.listable_server_name("bad\nname"));
+  t.ok(!mineos.listable_server_name(""));
+  t.ok(!mineos.valid_server_name("survival-1"), "new servers still get the strict rule");
+  t.done();
+};
