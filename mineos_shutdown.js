@@ -17,9 +17,6 @@ function read_ini(filepath) {
 
 console.log("Stopping running games");
 
-// List names of running servers
-var servers = mineos.server_list_up();
-
 // Read base directory configurations
 var mineos_config = read_ini('/etc/mineos.conf') || read_ini('/usr/local/etc/mineos.conf') || {};
 var base_directory = '/var/games/minecraft';
@@ -27,7 +24,7 @@ var base_directory = '/var/games/minecraft';
 if ('base_directory' in mineos_config) {
     try {
         if (mineos_config['base_directory'].length < 2)
-            throw new error('Invalid base_directory length.');
+            throw new Error('Invalid base_directory length.');
 
         base_directory = mineos_config['base_directory'];
         fs.ensureDirSync(base_directory);
@@ -44,45 +41,36 @@ if ('base_directory' in mineos_config) {
     process.exit(4);
 }
 
-// List of running servers
-var server_watches=[]
-
-function make_cb(server_watch)
-{
-    return function() {
-        console.log("    stopped server",server_watch.name);
-        server_watch.running = false;
-        for (w of server_watches) {
-            if (w.running){
-                console.log("  waiting for",w.name);
-            }
-        }                
-    };
-}
-
-for (server of servers) {
-    
-    // obect to track state of server
-    var server_watch = {name:server, running:true};
-    server_watches.push(server_watch);    
-    
-    var instance = new mineos.mc(server, base_directory);
-    console.log("Stopping", server);
-    cb_stopped = make_cb(server_watch);
-    
-    instance.stop(cb_stopped);
-
-}
-console.log("Waiting for servers to stop");
-
-// instance.stop() gives up waiting after about 30 seconds, but a large or
-// modded world can take longer to save. Keep waiting until every server has
-// exited or MINEOS_SHUTDOWN_TIMEOUT (seconds, default 120) runs out, so the
-// caller only kills what is left after that.
+// Send stop to every running server, and keep checking: a server started
+// while this runs (a scheduled restart, a start from the web UI before it
+// went down) is stopped too. instance.stop() itself gives up waiting after
+// about 30 seconds, but large or modded worlds can take longer to save, so
+// wait until every server has exited or MINEOS_SHUTDOWN_TIMEOUT (seconds,
+// default 120) runs out. Exit 0 when all stopped, 1 on timeout.
 var shutdown_timeout_s = parseInt(process.env.MINEOS_SHUTDOWN_TIMEOUT, 10) || 120;
 var shutdown_deadline = Date.now() + shutdown_timeout_s * 1000;
+var signalled = {};
+
+function stop_new_servers() {
+    var up = Object.keys(mineos.server_pids_up());
+    for (var name of up) {
+        if (name in signalled) continue;
+        signalled[name] = true;
+        console.log("Stopping", name);
+        new mineos.mc(name, base_directory).stop(function (server_name) {
+            return function (err) {
+                if (err) console.error("    could not stop", server_name, "cleanly:", err);
+                else console.log("    stopped", server_name);
+            };
+        }(name));
+    }
+    return up;
+}
+
+console.log("Waiting for servers to stop");
+stop_new_servers();
 var shutdown_poll = setInterval(function () {
-    var still_up = Object.keys(mineos.server_pids_up());
+    var still_up = stop_new_servers();
     if (!still_up.length) {
         console.log("All servers stopped");
         clearInterval(shutdown_poll);

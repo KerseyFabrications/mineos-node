@@ -116,17 +116,26 @@ fi
 # Run supervisor as a child rather than exec'ing it. When the container is
 # stopped, save and stop every running Minecraft server first; otherwise the
 # servers die with supervisor and lose whatever was not yet written to disk.
-# Give the container a stop grace period longer than MINEOS_SHUTDOWN_TIMEOUT.
-"$@" &
-child=$!
+# The web UI is stopped first so nothing new can start meanwhile. Give the
+# container a stop grace period longer than MINEOS_SHUTDOWN_TIMEOUT.
+child=""
+stopping=""
 
 stop_games() {
+  [ -n "$stopping" ] && return
+  stopping=1
+  status=0
   echo >&2 "Container stopping: saving and stopping Minecraft servers"
-  (cd /usr/games/minecraft && node mineos_shutdown.js) || echo >&2 "Some servers did not stop in time"
-  kill -TERM "$child" 2>/dev/null
-  wait "$child"
-  exit 0
+  supervisorctl stop mineos >/dev/null 2>&1 || true
+  (cd /usr/games/minecraft && exec node mineos_shutdown.js </dev/null) || {
+    status=1
+    echo >&2 "Some servers did not stop in time"
+  }
+  [ -n "$child" ] && kill -TERM "$child" 2>/dev/null && wait "$child"
+  exit $status
 }
 trap stop_games TERM INT
 
+"$@" &
+child=$!
 wait "$child"
