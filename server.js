@@ -215,13 +215,15 @@ server.backend = function(base_dir, socket_emitter, user_config) {
       Object.keys(self.servers),
       1,
       function(server_name, callback) {
-        self.servers[server_name].onreboot_start(function(err) {
+        self.servers[server_name].onreboot_start(function(err, started) {
           if (err)
-            logging.error('[{0}] Aborted server startup; condition not met:'.format(server_name), err);
+            logging.error('[{0}] Could not start on boot:'.format(server_name), err);
+          else if (started)
+            logging.info('[{0}] Started on boot. Waiting {1} ms...'.format(server_name, MS_TO_PAUSE));
           else
-            logging.info('[{0}] Server started. Waiting {1} ms...'.format(server_name, MS_TO_PAUSE));
+            logging.info('[{0}] Not set to start on boot'.format(server_name));
 
-          setTimeout(callback, (err ? 1 : MS_TO_PAUSE));
+          setTimeout(callback, (started ? MS_TO_PAUSE : 1));
         });
       },
       function(err) {}
@@ -827,10 +829,8 @@ function server_container(server_name, user_config, socket_io) {
 
   intervals['heartbeat'] = setInterval(heartbeat, HEARTBEAT_INTERVAL_MS);
 
-  function heartbeat() {
-    clearInterval(intervals['heartbeat']);
-    intervals['heartbeat'] = setInterval(heartbeat, HEARTBEAT_INTERVAL_MS * 3);
-
+  // The server's live status: whether it is up, its memory, ping and query.
+  function collect_heartbeat(callback) {
     async.parallel({
       'up': function(cb) { instance.property('up', function(err, is_up) { cb(null, is_up) }) },
       'memory': function(cb) { instance.property('memory', function(err, mem) { cb(null, err ? {} : mem) }) },
@@ -851,14 +851,22 @@ function server_container(server_name, user_config, socket_io) {
         })
       }
     }, function(err, retval) {
-      clearInterval(intervals['heartbeat']);
-      intervals['heartbeat'] = setInterval(heartbeat, HEARTBEAT_INTERVAL_MS);
-
-      nsp.emit('heartbeat', {
+      callback({
         'server_name': server_name,
         'timestamp': Date.now(),
         'payload': retval
-      })
+      });
+    })
+  }
+
+  function heartbeat() {
+    clearInterval(intervals['heartbeat']);
+    intervals['heartbeat'] = setInterval(heartbeat, HEARTBEAT_INTERVAL_MS * 3);
+
+    collect_heartbeat(function(status) {
+      clearInterval(intervals['heartbeat']);
+      intervals['heartbeat'] = setInterval(heartbeat, HEARTBEAT_INTERVAL_MS);
+      nsp.emit('heartbeat', status);
     })
   }
 
@@ -958,12 +966,13 @@ function server_container(server_name, user_config, socket_io) {
     async.waterfall([
       async.apply(instance.property, 'onreboot_start'),
       function(autostart, cb) {
-        logging.info('[{0}] autostart = {1}'.format(server_name, autostart));
-        cb(!autostart); //logically NOT'ing so that autostart = true continues to next func
+        if (!autostart) return cb('not set to start on boot');
+        cb();
       },
       async.apply(instance.start)
     ], function(err) {
-      callback(err);
+      if (err == 'not set to start on boot') return callback(null, false);
+      callback(err, !err);
     })
   }
 
@@ -1158,6 +1167,12 @@ function server_container(server_name, user_config, socket_io) {
     var ip_address = socket.request.connection.remoteAddress;
     var username = socket.request.user.username;
     var NOTICES_QUEUE_LENGTH = 10; // 0 < q <= 10
+
+    // Send the current status right away; otherwise a freshly loaded page shows
+    // the server as stopped (and Start as available) until the next heartbeat.
+    collect_heartbeat(function(status) {
+      socket.emit('heartbeat', status);
+    });
 
     function server_dispatcher(args) {
       var introspect = require('introspect');
