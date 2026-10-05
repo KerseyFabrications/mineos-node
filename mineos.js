@@ -108,6 +108,27 @@ mineos.valid_profile_part = function (part) {
   return typeof part == "string" && part.length > 0 && part[0] != "." && !/[\/\\\0]/.test(part) && part.indexOf("..") == -1;
 };
 
+// Orders rdiff-backup increments newest first and numbers them 0B, 1B, ...,
+// the form --remove-older-than and --restore-as-of take. rdiff-backup changed
+// the order it prints sizes in (2.1.1 lists oldest first, older releases newest
+// first), so the order is taken from the timestamps, never from the output.
+// Entries whose time does not parse keep their place after the dated ones.
+mineos.number_increments = function (entries) {
+  var dated = entries.map(function (entry, index) {
+    return { entry: entry, index: index, when: Date.parse(String(entry.time).replace(/ +/g, " ")) };
+  });
+  dated.sort(function (a, b) {
+    var a_ok = !isNaN(a.when), b_ok = !isNaN(b.when);
+    if (a_ok && b_ok && a.when != b.when) return b.when - a.when;
+    if (a_ok != b_ok) return a_ok ? -1 : 1;
+    return a.index - b.index;
+  });
+  return dated.map(function (d, i) {
+    d.entry.step = "{0}B".format(i);
+    return d.entry;
+  });
+};
+
 mineos.valid_server_name = function (server_name) {
   var regex_valid_server_name = /^(?!\.)[a-zA-Z0-9_\.]+$/;
   return regex_valid_server_name.test(server_name);
@@ -1205,25 +1226,11 @@ mineos.mc = function (server_name, base_dir) {
     var increment_lines = [];
 
     var rdiff = child_process.spawn(binary, args, params);
+    var output = "";
 
+    // Output can arrive in several chunks; parse it whole once rdiff-backup exits.
     rdiff.stdout.on("data", function (data) {
-      var buffer = Buffer.from(data, "ascii");
-      // --list-incremets option returns increments in reverse order
-      var lines = buffer.toString("ascii").split("\n").reverse();
-      var incrs = 0;
-
-      for (var i = 0; i < lines.length; i++) {
-        var match = lines[i].match(regex);
-        if (match) {
-          increment_lines.push({
-            step: "{0}B".format(incrs),
-            time: match[1],
-            size: "",
-            cum: "",
-          });
-          incrs += 1;
-        }
-      }
+      output += data.toString("ascii");
     });
 
     rdiff.on("error", function (code) {
@@ -1232,11 +1239,12 @@ mineos.mc = function (server_name, base_dir) {
     });
 
     rdiff.on("exit", function (code) {
-      if (code == 0) {
-        // branch if all is well
-        callback(code, increment_lines);
-      } // branch if dir exists, not an rdiff-backup dir
-      else callback(true, []);
+      if (code != 0) return callback(true, []); // dir exists, not an rdiff-backup dir
+      output.split("\n").forEach(function (line) {
+        var match = line.match(regex);
+        if (match) increment_lines.push({ time: match[1], size: "", cum: "" });
+      });
+      callback(code, mineos.number_increments(increment_lines));
     });
   };
 
@@ -1248,27 +1256,11 @@ mineos.mc = function (server_name, base_dir) {
     var increment_lines = [];
 
     var rdiff = child_process.spawn(binary, args, params);
+    var output = "";
 
+    // Output can arrive in several chunks; parse it whole once rdiff-backup exits.
     rdiff.stdout.on("data", function (data) {
-      var buffer = Buffer.from(data, "ascii");
-
-      // Since rdiff-backup v2.1.1a0 increments are listed in ascending order instead of descending
-      // https://github.com/rdiff-backup/rdiff-backup/blob/v2.1.1a0/CHANGELOG.adoc#11-changes
-      var lines = buffer.toString("ascii").split("\n").reverse();
-      var incrs = 0;
-
-      for (var i = 0; i < lines.length; i++) {
-        var match = lines[i].match(regex);
-        if (match) {
-          increment_lines.push({
-            step: "{0}B".format(incrs),
-            time: match[1],
-            size: match[2],
-            cum: match[3],
-          });
-          incrs += 1;
-        }
-      }
+      output += data.toString("ascii");
     });
 
     rdiff.on("error", function (code) {
@@ -1277,10 +1269,12 @@ mineos.mc = function (server_name, base_dir) {
     });
 
     rdiff.on("exit", function (code) {
-      if (code == 0)
-        // branch if all is well
-        callback(code, increment_lines); // branch if dir exists, not an rdiff-backup dir
-      else callback(true, []);
+      if (code != 0) return callback(true, []); // dir exists, not an rdiff-backup dir
+      output.split("\n").forEach(function (line) {
+        var match = line.match(regex);
+        if (match) increment_lines.push({ time: match[1], size: match[2], cum: match[3] });
+      });
+      callback(code, mineos.number_increments(increment_lines));
     });
   };
 
