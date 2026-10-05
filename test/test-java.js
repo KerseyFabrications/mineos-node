@@ -25,6 +25,9 @@ test.minecraft_from_neoforge = function (t) {
   t.equal(java.minecraftFromNeoForge("21.0.167"), "1.21");
   t.equal(java.minecraftFromNeoForge("20.4.237"), "1.20.4");
   t.equal(java.minecraftFromNeoForge("26.1.0.12-beta"), "26.1");
+  t.equal(java.minecraftFromNeoForge("26.3.0.48-beta"), "26.3");
+  t.equal(java.minecraftFromNeoForge("26.3.1.5"), "26.3.1");
+  t.equal(java.minecraftFromNeoForge("26.1.0.0-alpha.1+snapshot-1"), "26.1");
   t.equal(java.minecraftFromNeoForge("not-a-version"), null);
   t.done();
 };
@@ -58,6 +61,10 @@ test.minecraft_from_server_dir = function (t) {
   // the vanilla jar an installer laid down outranks the loader version
   fs.mkdirSync(path.join(dir, "libraries/net/minecraft/server/1.21.1-20240808.144430"), { recursive: true });
   t.equal(java.minecraftFromServerDir(dir), "1.21.1");
+
+  // upgraded in place: the old version's directories stay, the highest wins
+  fs.mkdirSync(path.join(dir, "libraries/net/neoforged/neoforge/26.3.0.48-beta"), { recursive: true });
+  t.equal(java.minecraftFromServerDir(dir), "26.3");
 
   var fabric = fs.mkdtempSync(path.join(os.tmpdir(), "mineos-java-"));
   fs.mkdirSync(path.join(fabric, ".fabric/server"), { recursive: true });
@@ -130,4 +137,23 @@ test.required_java_from_jar = function (t) {
   t.equal(java.requiredJavaFromJar(path.join(dir, "missing.jar")), null);
   fs.rmSync(dir, { recursive: true, force: true });
   t.done();
+};
+
+test.compare_versions = function (t) {
+  t.ok(java.compareVersions("1.21.10", "1.21.9") > 0);
+  t.ok(java.compareVersions("26.1", "1.21.11") > 0);
+  t.equal(java.compareVersions("1.21", "1.21.0"), 0);
+  t.done();
+};
+
+test.profile_outranks_stale_libraries = function (t) {
+  var dir = fs.mkdtempSync(path.join(os.tmpdir(), "mineos-java-"));
+  fs.mkdirSync(path.join(dir, "libraries/net/minecraft/server/1.21.1-20240808.144430"), { recursive: true });
+  java.resolveJava(dir, { java: { jarfile: "server.jar" }, minecraft: { profile: "26.3.0.48-beta" } }, function (err, picked) {
+    // whichever runtime this host has, the requirement must come from the profile
+    t.ok(err || picked.required == 25 || picked.source == "default");
+    if (picked) t.equal(picked.minecraft, "26.3");
+    fs.rmSync(dir, { recursive: true, force: true });
+    t.done();
+  });
 };

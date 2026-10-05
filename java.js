@@ -34,14 +34,30 @@ function requiredJavaForMinecraft(mc_version) {
   return 8;
 }
 
-// NeoForge versions encode the Minecraft version: 21.1.229 is 1.21.1, and
-// from the 26.x releases on the leading fields are the Minecraft version.
+// NeoForge versions encode the Minecraft version. Up to 1.21.x they are
+// <mc minor>.<mc patch>.<build> (21.1.229 is 1.21.1); from 26.x on they are
+// <year>.<drop>.<hotfix>.<build> (26.3.0.48-beta is 26.3).
 function minecraftFromNeoForge(nf_version) {
-  var m = /^(\d+)\.(\d+)\./.exec(String(nf_version || ""));
+  var m = /^(\d+)\.(\d+)\.(\d+)/.exec(String(nf_version || ""));
   if (!m) return null;
   var major = parseInt(m[1], 10);
-  if (major >= 26) return `${m[1]}.${m[2]}`;
+  if (major >= 26) return m[3] == "0" ? `${m[1]}.${m[2]}` : `${m[1]}.${m[2]}.${m[3]}`;
   return m[2] == "0" ? `1.${m[1]}` : `1.${m[1]}.${m[2]}`;
+}
+
+// Orders Minecraft versions (1.21.1 < 1.21.10 < 26.1).
+function compareVersions(a, b) {
+  var pa = String(a).split(".").map(Number);
+  var pb = String(b).split(".").map(Number);
+  for (var i = 0; i < Math.max(pa.length, pb.length); i++) {
+    var d = (pa[i] || 0) - (pb[i] || 0);
+    if (d) return d;
+  }
+  return 0;
+}
+
+function highest(versions) {
+  return versions.filter(Boolean).sort(compareVersions).pop() || null;
 }
 
 // Minecraft version named in a jar file name, for the common launchers.
@@ -82,28 +98,27 @@ function listDir(dir) {
   }
 }
 
-// The Minecraft version a modded server is built on, from the vanilla jar its
-// installer laid down under libraries/ (Forge and NeoForge) or .fabric/.
+// The Minecraft version a modded server is built on, from what its loader
+// installed: the NeoForge version, else the vanilla jar under libraries/
+// (Forge and NeoForge), else Fabric's cached server jar. A server upgraded in
+// place keeps the old version's directories next to the new ones, so the
+// highest version found wins.
 function minecraftFromServerDir(cwd) {
-  var vanilla = listDir(path.join(cwd, "libraries", "net", "minecraft", "server"));
+  var neoforge = listDir(path.join(cwd, "libraries", "net", "neoforged", "neoforge")).map(minecraftFromNeoForge);
+  if (highest(neoforge)) return highest(neoforge);
+
   // NeoForge names these 1.21.1-20240808.144430; the version is the prefix.
-  for (var i = 0; i < vanilla.length; i++) {
-    var v = /^(\d+(?:\.\d+)+)(?:$|-)/.exec(vanilla[i]);
-    if (v) return v[1];
-  }
+  var vanilla = listDir(path.join(cwd, "libraries", "net", "minecraft", "server")).map(function (dir) {
+    var v = /^(\d+(?:\.\d+)+)(?:$|-)/.exec(dir);
+    return v && v[1];
+  });
+  if (highest(vanilla)) return highest(vanilla);
 
-  var neoforge = listDir(path.join(cwd, "libraries", "net", "neoforged", "neoforge"));
-  for (var j = 0; j < neoforge.length; j++) {
-    var mc = minecraftFromNeoForge(neoforge[j]);
-    if (mc) return mc;
-  }
-
-  var fabric = listDir(path.join(cwd, ".fabric", "server"));
-  for (var k = 0; k < fabric.length; k++) {
-    var m = /^(\d+(?:\.\d+)+)-server\.jar$/.exec(fabric[k]);
-    if (m) return m[1];
-  }
-  return null;
+  var fabric = listDir(path.join(cwd, ".fabric", "server")).map(function (file) {
+    var m = /^(\d+(?:\.\d+)+)-server\.jar$/.exec(file);
+    return m && m[1];
+  });
+  return highest(fabric);
 }
 
 // Minecraft version from a profile id: plain versions (1.21.5, 26.3,
@@ -197,7 +212,9 @@ function resolveJava(cwd, sc, callback) {
 
   if (/\.jar$/i.test(jarfile)) required = requiredJavaFromJar(path.join(cwd, jarfile));
   if (!required) {
-    minecraft = minecraftFromJarName(jarfile) || minecraftFromServerDir(cwd) || minecraftFromProfile((sc.minecraft || {}).profile);
+    // The profile names the version the server is set to run (and is what
+    // start copies in), so it outranks directories an earlier version left.
+    minecraft = minecraftFromJarName(jarfile) || minecraftFromProfile((sc.minecraft || {}).profile) || minecraftFromServerDir(cwd);
     required = requiredJavaForMinecraft(minecraft);
   }
 
@@ -205,6 +222,10 @@ function resolveJava(cwd, sc, callback) {
   if (required) {
     var chosen = pickJava(required, installedJavas());
     if (chosen) return callback(null, { binary: chosen.binary, source: "auto", required: required, minecraft: minecraft });
+    if (required < 17)
+      return callback(
+        `This server needs Java ${required} (Minecraft ${minecraft || "from its jar"}), and no compatible runtime is installed. Install one, or set [java] java_binary.`,
+      );
   }
   if (!fallback) return callback("No Java runtime found on this host.");
   callback(null, { binary: fallback, source: "default", required: required, minecraft: minecraft });
@@ -226,6 +247,7 @@ function usedJavaVersion(cwd, sc, callback) {
 }
 
 module.exports = {
+  compareVersions,
   requiredJavaForMinecraft,
   minecraftFromNeoForge,
   minecraftFromJarName,
