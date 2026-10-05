@@ -13,6 +13,18 @@
   };
 })();
 
+// Commands that take a while. The server reports their progress in the
+// heartbeat (state: starting or stopping) to every browser; the click itself
+// gets a notice so nothing looks frozen before that first update arrives.
+// Used by the controller (the click) and each server's result handler.
+var PROGRESS_COMMANDS = {
+  start: ['STARTING', 'STARTING_NOTICE'],
+  restart: ['STARTING', 'STARTING_NOTICE'],
+  stop: ['STOPPING', 'STOPPING_NOTICE'],
+  stop_and_backup: ['STOPPING', 'STOPPING_NOTICE'],
+  kill: ['STOPPING', 'KILL_NOTICE']
+};
+
 var app = angular.module("mineos", ['angularMoment', 'pascalprecht.translate', 'ngSanitize']);
 
 app.config(function ($translateProvider) {
@@ -536,17 +548,6 @@ app.controller("Webui", ['$scope', 'socket', 'ServerService', '$filter', '$trans
   $scope.change_locale = function(locale) {
     $translate.use(locale);
   }
-
-  // Commands that take a while. The server reports their progress in the
-  // heartbeat (state: starting or stopping) to every browser; the click itself
-  // gets a notice so nothing looks frozen before that first update arrives.
-  var PROGRESS_COMMANDS = {
-    start: ['STARTING', 'STARTING_NOTICE'],
-    restart: ['STARTING', 'STARTING_NOTICE'],
-    stop: ['STOPPING', 'STOPPING_NOTICE'],
-    stop_and_backup: ['STOPPING', 'STOPPING_NOTICE'],
-    kill: ['STOPPING', 'KILL_NOTICE']
-  };
 
   $scope.server_command = function(cmd, args) {
     var instance = $scope.servers[$scope.current];
