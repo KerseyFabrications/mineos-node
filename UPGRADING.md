@@ -39,13 +39,15 @@ environment variables (`USER_NAME`, `USER_PASSWORD`, `USER_UID`, `GROUP_NAME`, `
 - **Java is chosen per server.** A server with an empty `java_binary` now runs on the Java its
   Minecraft version needs (26.x on 25, 1.20.5 to 1.21.x on 21, 1.17 to 1.20.4 on 17 or newer,
   older on 8), instead of the one `java` on the PATH. A server with `java_binary` set keeps using
-  it. The server page shows the Java version it will start with.
+  it (set it under `[java]` in the server's `server.config`). The server page shows the Java
+  version it will start with.
   - On a bare-metal host with several Java versions installed, a server may now get an older
     runtime than before (for example a 1.20.1 server gets 17 where it used to get 21). If a mod
     needs the newer one, set `java_binary` for that server.
 - **A `java_binary` that is not a Java runtime now stops the start with an error.** Before, a
-  value like `server.jar` let the server start and die immediately with no message. Fix the value
-  in the server's Java settings, or clear it to have Java chosen automatically.
+  value like `server.jar` let the server start and die immediately with no message. Fix
+  `java_binary` under `[java]` in the server's `server.config` (in its server directory), or clear
+  it to have Java chosen automatically. The web UI has no field for it.
 - **A legacy server (Minecraft 1.16 or older) never runs on a modern Java.** If no Java 8 is
   installed, it refuses to start and says why. The image includes Java 8.
 - **`screenlog.0`** (screen's console log in each server directory) is rotated to `screenlog.1`
