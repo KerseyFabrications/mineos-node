@@ -3,7 +3,7 @@
 Notes for people moving an existing MineOS install to this fork's image, newest first. Each entry
 says what changed and what, if anything, you need to do.
 
-## 2026-10: Java 25, automatic Java per server, safe container stop
+## 2.0.0 (2026-10): Java 25, automatic Java per server, safe container stop
 
 **The image.** `ghcr.io/kerseyfabrications/mineos-node` replaces `hexparrot/mineos`, whose last
 build (2022) carries Java 8 and 17 only. It runs on Ubuntu 26.04 and Node.js 24, and includes
@@ -66,6 +66,17 @@ environment variables (`USER_NAME`, `USER_PASSWORD`, `USER_UID`, `GROUP_NAME`, `
   setting container shutdown uses. **Bare-metal installs with the systemd unit:** update
   `mineos-games.service` from `init/`; its `TimeoutStopSec` is now 180 so systemd does not cut
   the shutdown short.
+- **Start, stop and restart show their progress.** The buttons stay disabled while one is
+  running, the status says "starting" or "stopping", and you are told when the server has
+  finished loading or failed to start. This comes from the server, so every open browser shows
+  the same thing.
+- **Kill works inside the container.** It used to fail because the server's Java process could
+  not be found.
+- **Backup, archive, restore and prune report failures.** Before, a failed `tar` or
+  rdiff-backup run could still be shown as a success.
+- **Profile downloads are checked.** Only a profile the server listed can be downloaded, and
+  its file name cannot point outside the profiles directory. The NeoForge installer runs as an
+  unprivileged user.
 - **`screenlog.0`** (screen's console log in each server directory) is rotated to `screenlog.1`
   at every start, instead of growing forever.
 - **NeoForge profile.** NeoForge builds, including 26.x, can be downloaded like any other

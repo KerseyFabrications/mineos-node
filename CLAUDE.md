@@ -69,11 +69,16 @@ Java, Node and Ubuntu, and ships a container image people can actually install.
 | `webui.js` | Express + socket.io web server, login, HTTPS setup |
 | `server.js` | Server registry, profile downloads, socket.io API the web UI calls |
 | `mineos.js` | One Minecraft server: config files, start/stop through `screen`, backups (rdiff-backup), archives |
-| `java.js` | Reports the Java runtime a server will use |
+| `java.js` | Chooses the Java runtime a server starts with, from its Minecraft version |
+| `security.js` | Same-origin checks for the HTTP API and socket.io handshakes; the list of API commands |
+| `mineos_shutdown.js` | Saves and stops every running server when the container or service stops |
 | `profiles.js`, `profiles.d/` | Downloadable server-jar profiles (Mojang, Paper, Forge, NeoForge, ...). `postdownload` hooks run installers |
 | `auth.js` | Login against system accounts (`/etc/shadow`) |
 | `html/` | AngularJS 1.x front end |
 | `entrypoint.sh`, `Dockerfile` | Container: creates the login user from env vars, then runs supervisor |
+| `Dockerfile.dev` | Two-stage variant for local development; keep its packages in step with `Dockerfile` |
+| `.github/workflows/docker.yml` | CI: tests, then the multi-arch image build, publish and signing |
+| `UPGRADING.md` | User-facing upgrade notes, newest first |
 | `test/` | Unit tests |
 
 ## Non-obvious behavior (these cost real time)
@@ -84,10 +89,17 @@ Java, Node and Ubuntu, and ships a container image people can actually install.
   version: the `java_version` in the jar's `version.json`, else the version in the jar name, the
   `libraries/` or `.fabric/` tree a loader installed, or the profile id. Legacy servers (below
   1.17) never move to a modern runtime. If no version can be found, the `java` on PATH is used.
-- **Servers run inside `screen`.** The start command is `screen -dmS mc-<name> <java> ...` in the
+- **Servers run inside `screen`.** The start command is `screen -dmSL mc-<name> <java> ...` in the
   server directory, as the server directory's owner. A startup failure leaves no `logs/latest.log`,
-  so screen's own log is the only record of why.
-- **rdiff-backup lists increments oldest-first** from 2.1.1 on. Older code assumed newest-first.
+  so screen's log (`screenlog.0`) is the only record of why. Inside a container `/proc/<pid>/environ`
+  of another user is unreadable, so the Java process is found as the child of the screen process
+  (by parent pid), not by its environment.
+- **Start and stop state is the server's, not the browser's.** `server.js` tracks a running
+  start, stop or restart per server and sends it in every heartbeat (`state`: starting, stopping,
+  up, down; `ready` once the server has finished loading). The web UI disables buttons from that,
+  so every open browser agrees, and a `server_event` tells it when a start finished or failed.
+- **rdiff-backup lists increments oldest-first** from 2.1.1 on. `mineos.number_increments` sorts
+  them by time and numbers them newest-first (`0B`, `1B`, ...), which is what restore expects.
 - **The container image must build from this repository's source,** never by cloning upstream at
   build time. A Dockerfile that clones upstream silently ships upstream's code instead of ours.
 - **NeoForge servers start through ServerStarterJar.** The NeoForge installer lays down `run.sh`
@@ -110,6 +122,14 @@ npm ci && npm test                       # unit tests (needs rdiff-backup instal
 docker build -t mineos-node:dev .        # local image
 ```
 
-Images for releases are built by GitHub Actions for linux/amd64 and linux/arm64 and published to
-GHCR. Test an image against copies of real server directories before tagging a release, covering
-at least vanilla on each Java tier, a Fabric server, and a NeoForge server.
+GitHub Actions runs the unit tests on every push; nothing is built unless they pass. It then
+builds linux/amd64 and linux/arm64 on native runners and publishes one multi-arch image to GHCR,
+tagged with the branch name and `sha-<short>` on every push, and with the version on a `v*` tag.
+Published images carry provenance and an SBOM and are signed with cosign (the verify command is in
+the workflow). Actions and the base image are pinned; Dependabot proposes updates.
+
+Test an image against copies of real server directories before tagging a release, covering at
+least vanilla on each Java tier, a Fabric server, and a NeoForge server.
+
+In a clone of this fork, `gh` may default to the upstream repository; pass `-R <owner>/mineos-node`
+when checking runs or issues.
