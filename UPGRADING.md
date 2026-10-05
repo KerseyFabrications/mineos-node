@@ -40,6 +40,9 @@ environment variables (`USER_NAME`, `USER_PASSWORD`, `USER_UID`, `GROUP_NAME`, `
   from its own address (or the address a reverse proxy forwards as `X-Forwarded-Host`). The HTTP
   API at `/api/<server>/<command>` and `/admin/command` takes POST only and only the server
   commands the web UI offers (start, stop, restart, backup, ...); deleting a server is web-UI only.
+  **Behind a reverse proxy,** the proxy must pass the address the browser used, port included:
+  keep the original `Host` header, or set `X-Forwarded-Host` (nginx: `$http_host`, not `$host`,
+  which drops the port). Otherwise every change and the live connection are refused.
 - **Without `USER_PASSWORD`, the generated password now survives a restart.** It is random, kept
   in `/root/password` inside the container, and printed once when it is created. Before, a
   restarted container fell back to the literal password `random_see_log`. If you relied on the

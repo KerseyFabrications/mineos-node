@@ -64,3 +64,16 @@ test.api_commands = function (t) {
   t.ok(!security.isApiCommand(undefined));
   t.done();
 };
+
+test.socket_jsonp_refused = function (t) {
+  // a <script> tag can load the JSONP transport with no Origin or Referer
+  var r = { method: "GET", url: "/socket.io/?EIO=3&transport=polling&j=0", headers: { host: "a:1" } };
+  security.allowSocketRequest(r, function (err, ok) {
+    t.equal(ok, false);
+    var xhr = { method: "GET", url: "/socket.io/?EIO=3&transport=polling", headers: { host: "a:1", referer: "http://a:1/admin/index.html" } };
+    security.allowSocketRequest(xhr, function (err2, ok2) {
+      t.equal(ok2, true);
+      t.done();
+    });
+  });
+};

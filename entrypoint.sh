@@ -8,7 +8,10 @@ set -eo pipefail
 if [ -z "$USER_PASSWORD" ] || [ "$USER_PASSWORD" = "random_see_log" ]; then
   if [ -s /root/password ]; then
     # older images wrote "Password set to: <password>"
-    USER_PASSWORD=$(sed -e 's/^Password set to: *//' /root/password | head -n 1)
+    USER_PASSWORD=$(sed -e 's/^Password set to: *//' -e 's/[[:space:]]*$//' /root/password | head -n 1)
+    chmod 600 /root/password
+  fi
+  if [ -n "$USER_PASSWORD" ] && [ "$USER_PASSWORD" != "random_see_log" ]; then
     echo >&2 "USER_PASSWORD not specified; using the generated password stored in /root/password"
   else
     USER_PASSWORD=$(node -e 'process.stdout.write(require("crypto").randomBytes(15).toString("base64url"))')

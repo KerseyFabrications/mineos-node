@@ -55,10 +55,27 @@ function requireSameOrigin(req, res, next) {
 
 // engine.io allowRequest hook: refuse WebSocket and polling handshakes from
 // another origin before any session is attached.
+//
+// JSONP polling is refused outright: a <script> tag can request it without
+// sending Origin or Referer, and the web UI only uses XHR or WebSocket.
 function allowSocketRequest(req, callback) {
+  if (isJsonp(req)) {
+    console.warn("Refused JSONP socket.io handshake");
+    return callback(null, false);
+  }
   var ok = sameOrigin(req);
   if (!ok) console.warn("Refused cross-origin socket.io handshake from", req.headers.origin);
   callback(null, ok);
+}
+
+function isJsonp(req) {
+  var query = req._query || {};
+  if ("j" in query) return true;
+  try {
+    return new URL(req.url || "/", "http://x").searchParams.has("j");
+  } catch (e) {
+    return false;
+  }
 }
 
 function isApiCommand(command) {

@@ -211,11 +211,21 @@ mineos.dependencies(function(err, binaries) {
         res.sendFile('/html/login.html');
     });
 
-    app.post('/auth', passport.authenticate('local-signin', {
-        successRedirect: '/admin/index.html',
-        failureRedirect: '/admin/login.html'
-        })
-    );
+    app.post('/auth', function(req, res, next) {
+        passport.authenticate('local-signin', function(err, user) {
+            if (err) return next(err);
+            if (!user) return res.redirect('/admin/login.html');
+            // Start a new session at login, so a session id planted in the
+            // browser before login is worthless afterwards.
+            req.session.regenerate(function(regen_err) {
+                if (regen_err) return next(regen_err);
+                req.logIn(user, function(login_err) {
+                    if (login_err) return next(login_err);
+                    res.redirect('/admin/index.html');
+                });
+            });
+        })(req, res, next);
+    });
 
   // HTTP API for scripts. POST only (a link or image cannot trigger it) and
   // limited to the commands the web UI itself offers.
