@@ -13,6 +13,12 @@ var SERVER_STARTER_URL = 'https://github.com/neoforged/ServerStarterJar/releases
 
 var INSTALLER_TIMEOUT_MS = 15 * 60 * 1000;
 
+// The installer is downloaded code that runs Java. Run it as an unprivileged
+// user (nobody) in a directory that user owns, never as root; the profile
+// directory is handed back to root afterwards like every other profile.
+var INSTALLER_UID = 65534;
+var INSTALLER_GID = 65534;
+
 exports.profile = {
   name: 'NeoForge Mod',
   request_args: {
@@ -35,7 +41,7 @@ exports.profile = {
       //   e.g. 21.4.111-beta -> Minecraft 1.21.4, build 111, beta
       // From 26.x on: <year>.<drop>.<hotfix>.<build>[-beta|-alpha...]
       //   e.g. 26.3.0.48-beta -> Minecraft 26.3, build 48, beta
-      var nf_regex = /^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?(-.+)?$/;
+      var nf_regex = /^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?(-[0-9A-Za-z.+-]+)?$/;
 
       for (var i = 0; i < versions.length; i++) {
         var nfver = versions[i];
@@ -101,36 +107,61 @@ exports.profile = {
     var picked = required ? java.pickJava(required, java.installedJavas()) : null;
     var java_binary = picked ? picked.binary : 'java';
 
-    child_process.execFile(
-      java_binary,
-      ['-jar', dest_filepath, '--installServer'],
-      { cwd: install_dir, maxBuffer: 10 * 1024 * 1024, timeout: INSTALLER_TIMEOUT_MS },
-      function (err, stdout, stderr) {
-        if (err) {
-          return finish(new Error('NeoForge installer failed: ' + (stderr || err.message)));
+    function chown_tree(owner, cb) {
+      child_process.execFile('chown', ['-R', owner, install_dir], function (err) {
+        cb(err ? new Error('could not change ownership of ' + install_dir + ': ' + err.message) : null);
+      });
+    }
+
+    function run_installer(cb) {
+      child_process.execFile(
+        java_binary,
+        ['-jar', dest_filepath, '--installServer'],
+        {
+          cwd: install_dir,
+          uid: INSTALLER_UID,
+          gid: INSTALLER_GID,
+          env: { PATH: process.env.PATH, HOME: install_dir },
+          maxBuffer: 10 * 1024 * 1024,
+          timeout: INSTALLER_TIMEOUT_MS
+        },
+        function (err, stdout, stderr) {
+          cb(err ? new Error('NeoForge installer failed: ' + (stderr || err.message)) : null);
         }
+      );
+    }
 
-        var hash = crypto.createHash('sha256');
-        var stream = fs.createWriteStream(partial_jar);
-        stream.on('error', finish);
-        stream.on('finish', function () {
-          var digest = hash.digest('hex');
-          if (digest != SERVER_STARTER_SHA256)
-            return finish(new Error('ServerStarterJar checksum mismatch: got ' + digest));
-          fs.move(partial_jar, server_jar, { overwrite: true }, finish);
+    chown_tree(INSTALLER_UID + ':' + INSTALLER_GID, function (chown_err) {
+      if (chown_err) return finish(chown_err);
+      run_installer(function (install_err) {
+        chown_tree('0:0', function (restore_err) {
+          if (install_err || restore_err) return finish(install_err || restore_err);
+          download_starter();
         });
+      });
+    });
 
-        request(SERVER_STARTER_URL.format(SERVER_STARTER_VERSION))
-          .on('error', finish)
-          .on('response', function (res) {
-            if (res.statusCode != 200)
-              finish(new Error('ServerStarterJar download failed: HTTP ' + res.statusCode));
-          })
-          .on('data', function (chunk) {
-            hash.update(chunk);
-          })
-          .pipe(stream);
-      }
-    );
+    function download_starter() {
+      var hash = crypto.createHash('sha256');
+      var stream = fs.createWriteStream(partial_jar);
+      stream.on('error', finish);
+      stream.on('finish', function () {
+        var digest = hash.digest('hex');
+        if (digest != SERVER_STARTER_SHA256)
+          return finish(new Error('ServerStarterJar checksum mismatch: got ' + digest));
+        fs.move(partial_jar, server_jar, { overwrite: true }, finish);
+      });
+
+      request(SERVER_STARTER_URL.format(SERVER_STARTER_VERSION))
+        .on('error', finish)
+        .on('response', function (res) {
+          if (res.statusCode != 200)
+            finish(new Error('ServerStarterJar download failed: HTTP ' + res.statusCode));
+        })
+        .on('data', function (chunk) {
+          hash.update(chunk);
+        })
+        .pipe(stream);
+    }
   } //end postdownload
 };
