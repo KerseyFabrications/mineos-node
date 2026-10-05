@@ -1,4 +1,6 @@
-FROM ubuntu:26.04
+# Pinned by digest so every build starts from the same base; Dependabot
+# proposes updates.
+FROM ubuntu:26.04@sha256:f144425ff09be612d6d9ad965196e9cdc23dae1f42110a8a11a3e9a8198759f7
 LABEL MAINTAINER='William Dizon <wdchromium@gmail.com>'
 
 #update and accept all prompts
@@ -30,9 +32,18 @@ RUN ARCH="$(dpkg --print-architecture)" \
   && /usr/lib/jvm/java-8-openjdk-${ARCH}/jre/bin/java -version \
   && java -version 2>&1 | grep -q '"25'
 
-#install node from nodesource following instructions: https://github.com/nodesource/distributions#debinstall
-RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
-  && apt-get install -y nodejs \
+#install node 24 from NodeSource's signed apt repository. The repository key is
+#checked against its published fingerprint before apt is told to trust it, so
+#no downloaded script runs as root.
+ARG NODESOURCE_KEY_FPR=6F71F525282841EEDAF851B42F59B5F99B1BE0B4
+RUN apt-get update && apt-get install -y gnupg \
+  && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key -o /tmp/nodesource.key \
+  && gpg --show-keys --with-colons /tmp/nodesource.key | grep -q "^fpr:::::::::${NODESOURCE_KEY_FPR}:" \
+  && gpg --dearmor -o /usr/share/keyrings/nodesource.gpg /tmp/nodesource.key \
+  && echo "deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_24.x nodistro main" \
+     > /etc/apt/sources.list.d/nodesource.list \
+  && apt-get update && apt-get install -y nodejs \
+  && apt-get remove --purge -y gnupg && apt-get autoremove -y \
   && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 #install mineos from this build context (not a fresh clone of upstream master,
