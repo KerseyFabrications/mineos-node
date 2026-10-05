@@ -13,25 +13,35 @@ RUN apt-get update && apt-get install -y \
   rlwrap \
   unzip \
   openjdk-25-jre-headless \
+  openjdk-21-jre-headless \
+  openjdk-8-jre-headless \
   ca-certificates-java \
   && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+#make Java 25 the default `java` on PATH; 21 and 8 stay available at fixed paths
+#for a server's [java] java_binary:
+#  /usr/lib/jvm/java-25-openjdk-<arch>/bin/java
+#  /usr/lib/jvm/java-21-openjdk-<arch>/bin/java
+#  /usr/lib/jvm/java-8-openjdk-<arch>/jre/bin/java
+RUN ARCH="$(dpkg --print-architecture)" \
+  && update-alternatives --set java /usr/lib/jvm/java-25-openjdk-${ARCH}/bin/java \
+  && /usr/lib/jvm/java-25-openjdk-${ARCH}/bin/java -version \
+  && /usr/lib/jvm/java-21-openjdk-${ARCH}/bin/java -version \
+  && /usr/lib/jvm/java-8-openjdk-${ARCH}/jre/bin/java -version \
+  && java -version 2>&1 | grep -q '"25'
 
 #install node from nodesource following instructions: https://github.com/nodesource/distributions#debinstall
 RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
   && apt-get install -y nodejs \
   && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-#download mineos from github
-RUN mkdir /usr/games/minecraft \
-  && cd /usr/games/minecraft \
-  && git clone --depth=1 https://github.com/hexparrot/mineos-node.git . \
+#install mineos from this build context (not a fresh clone of upstream master,
+#so the image carries the code and package.json of the branch being built).
+#package-lock.json is dropped: it predates the package.json dependency bumps.
+COPY . /usr/games/minecraft
+RUN cd /usr/games/minecraft \
   && cp mineos.conf /etc/mineos.conf \
   && chmod +x webui.js mineos_console.js service.js \
-  && npm pkg set dependencies.diskusage=1.2.0 \
-  && npm pkg set dependencies.userid=1.2.5 \
-  && npm pkg set dependencies.node-addon-api='^4.0.0' \
-  && npm pkg set overrides.nan=2.26.2 \
-  && npm pkg set overrides.node-addon-api='^4.0.0' \
   && rm -f package-lock.json
 
 #build npm deps and clean up apt for image minimalization
