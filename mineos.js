@@ -912,9 +912,12 @@ mineos.mc = function (server_name, base_dir) {
   };
 
   self.stop = function (callback) {
+    // Large and modded worlds can take well over 30 seconds to save. Giving up
+    // early reported a stop that was still in progress as failed, and made
+    // restart skip starting the server again.
     var test_interval_ms = 200;
     var iterations = 0;
-    var MAX_ITERATIONS_TO_QUIT = 150;
+    var MAX_ITERATIONS_TO_QUIT = (120 * 1000) / test_interval_ms;
 
     async.series(
       [
