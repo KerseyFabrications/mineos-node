@@ -52,6 +52,10 @@
   "START_ABORTED_NOTICE": "It stopped while starting. See Logging, logs/latest.log, for why.",
   "KILL_NOTICE": "Stopping it immediately, without saving.",
   "stop_timeout": "Still running two minutes after stop. Try again, or use Kill.",
+  "UNAVAILABLE_UP": "Not available while the server is running",
+  "UNAVAILABLE_DOWN": "Not available while the server is stopped",
+  "UNAVAILABLE_STARTING": "Not available while the server is starting",
+  "UNAVAILABLE_STOPPING": "Not available while the server is stopping",
 
   "SERVER_NAME": "Server Name",
   "CREATE_HELP": "Only letters, numbers and underscores.",

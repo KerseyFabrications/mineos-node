@@ -925,6 +925,14 @@ app.factory('ServerService', ['socket', '$filter', function(socket, $filter) {
       return state == 'up';
     }
 
+    // Why a command is unavailable now, as a translation key ('' when it is
+    // available), for the disabled control's tooltip.
+    me.unavailable_reason = function(cmd) {
+      if (me.can(cmd)) return '';
+      var state = me.state();
+      return state ? 'UNAVAILABLE_' + state.toUpperCase() : '';
+    }
+
     me.channel.on(server_name, 'heartbeat', function(data) {
       var previous = me.heartbeat || {};
       me.heartbeat = data.payload;

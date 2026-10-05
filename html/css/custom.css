@@ -95,3 +95,11 @@ button.control_centering {
 .light_purple { color: #FF55FF } /*       d          35   1 - intense */
 .yellow       { color: #FFFF55 } /*       e          33   1 - intense */
 .white        { color: #FFFFFF } /*       f          37   1 - intense */
+
+/* The orange warning label (Starting, Stopping) needs dark text to be
+   readable; white on #ffa037 is too low in contrast. */
+.label-warning,
+.badge-warning {
+    color: #3a2300;
+    text-shadow: none;
+}
