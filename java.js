@@ -11,6 +11,7 @@ var child_process = require("child_process");
 var which = require("which");
 
 var JVM_ROOT = "/usr/lib/jvm";
+var VERSION_TIMEOUT_MS = 5000; // for running any java -version
 
 // Minecraft version -> minimum Java major, from Mojang's version manifests
 // (each version's javaVersion.majorVersion).
@@ -176,6 +177,40 @@ function installedJavas(jvm_root) {
     });
 }
 
+// The java on PATH, as {major, binary}, so hosts that keep Java outside
+// /usr/lib/jvm (FreeBSD, /opt) still find a matching runtime. Its version is
+// read once per binary; it is the system's own java, not a server's choice.
+var path_java_cache = {};
+function pathJava() {
+  var binary = whichOrNull("java");
+  if (!binary) return null;
+  var real;
+  try {
+    real = fs.realpathSync(binary);
+  } catch (e) {
+    return null;
+  }
+  if (!(real in path_java_cache)) {
+    var major = null;
+    try {
+      var out = child_process.spawnSync(real, ["-version"], { timeout: VERSION_TIMEOUT_MS });
+      var m = /version "(?:1\.)?(\d+)/.exec(String(out.stderr || "") + String(out.stdout || ""));
+      if (m) major = parseInt(m[1], 10);
+    } catch (e) {}
+    path_java_cache[real] = major;
+  }
+  return path_java_cache[real] ? { major: path_java_cache[real], binary: binary } : null;
+}
+
+// The runtimes to choose from: everything under /usr/lib/jvm, plus the java
+// on PATH when it is a version not found there.
+function availableJavas() {
+  var javas = installedJavas();
+  var on_path = pathJava();
+  if (on_path && !javas.some(function (j) { return j.major == on_path.major; })) javas.push(on_path);
+  return javas;
+}
+
 // Best installed runtime for a required major. 17 and newer run on any later
 // Java; legacy servers (8 to 16) are only matched exactly or with the next
 // installed version below 17, since old Minecraft breaks on modern runtimes.
@@ -212,7 +247,8 @@ function isExecutable(file) {
 // Resolves the runtime for a server. callback(err, {binary, source, required, minecraft}).
 // source is "configured" (java_binary), "auto" (picked by version) or
 // "default" (the java on PATH, when the version could not be determined).
-function resolveJava(cwd, sc, callback) {
+// javas (optional, for tests) replaces the runtimes found on this host.
+function resolveJava(cwd, sc, callback, javas) {
   var java = sc.java || {};
   var configured = String(java.java_binary || "").trim();
 
@@ -239,7 +275,7 @@ function resolveJava(cwd, sc, callback) {
 
   var fallback = whichOrNull("java");
   if (required) {
-    var chosen = pickJava(required, installedJavas());
+    var chosen = pickJava(required, javas || availableJavas());
     if (chosen) return callback(null, { binary: chosen.binary, source: "auto", required: required, minecraft: minecraft });
     if (required < 17)
       return callback(
@@ -250,7 +286,6 @@ function resolveJava(cwd, sc, callback) {
   callback(null, { binary: fallback, source: "default", required: required, minecraft: minecraft });
 }
 
-var VERSION_TIMEOUT_MS = 5000;
 var version_cache = {}; // real binary path -> {mtimeMs, version}
 
 // The Java version string a server will run with, for the web UI.
@@ -295,6 +330,7 @@ module.exports = {
   minecraftFromProfile,
   requiredJavaFromJar,
   installedJavas,
+  availableJavas,
   pickJava,
   resolveJava,
   usedJavaVersion,

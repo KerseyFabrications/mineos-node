@@ -149,13 +149,28 @@ test.compare_versions = function (t) {
 test.profile_outranks_stale_libraries = function (t) {
   var dir = fs.mkdtempSync(path.join(os.tmpdir(), "mineos-java-"));
   fs.mkdirSync(path.join(dir, "libraries/net/minecraft/server/1.21.1-20240808.144430"), { recursive: true });
-  java.resolveJava(dir, { java: { jarfile: "server.jar" }, minecraft: { profile: "26.3.0.48-beta" } }, function (err, picked) {
-    // whichever runtime this host has, the requirement must come from the profile
-    t.ok(err || picked.required == 25 || picked.source == "default");
-    if (picked) t.equal(picked.minecraft, "26.3");
+  var javas = [{ major: 25, binary: "/j25" }, { major: 21, binary: "/j21" }];
+  var sc = { java: { jarfile: "server.jar" }, minecraft: { profile: "26.3.0.48-beta" } };
+  java.resolveJava(dir, sc, function (err, picked) {
+    t.equal(picked.minecraft, "26.3");
+    t.equal(picked.required, 25);
+    t.equal(picked.binary, "/j25");
     fs.rmSync(dir, { recursive: true, force: true });
     t.done();
-  });
+  }, javas);
+};
+
+test.legacy_server_without_java_8 = function (t) {
+  var dir = fs.mkdtempSync(path.join(os.tmpdir(), "mineos-java-"));
+  var sc = { java: { jarfile: "minecraft_server.1.12.2.jar" } };
+  java.resolveJava(dir, sc, function (err, picked) {
+    t.ok(err && err.indexOf("needs Java 8") != -1, "refuses rather than running on Java 21");
+    java.resolveJava(dir, sc, function (err2, picked2) {
+      t.equal(picked2.binary, "/j8");
+      fs.rmSync(dir, { recursive: true, force: true });
+      t.done();
+    }, [{ major: 21, binary: "/j21" }, { major: 8, binary: "/j8" }]);
+  }, [{ major: 21, binary: "/j21" }]);
 };
 
 test.required_java_from_jar_refuses_non_files = function (t) {
@@ -184,4 +199,23 @@ test.used_java_version_runs_as_owner = function (t) {
       t.done();
     });
   });
+};
+
+test.java_on_path_is_considered = function (t) {
+  var dir = fs.mkdtempSync(path.join(os.tmpdir(), "mineos-java-"));
+  var fake = path.join(dir, "java");
+  fs.writeFileSync(fake, '#!/bin/sh\necho \'openjdk version "1.8.0_402"\' >&2\n');
+  fs.chmodSync(fake, 0o755);
+  var saved = process.env.PATH;
+  process.env.PATH = dir + ":" + saved;
+  try {
+    var majors = java.availableJavas().map(function (j) {
+      return j.major;
+    });
+    t.ok(majors.indexOf(8) != -1, "a Java 8 on PATH counts even outside /usr/lib/jvm");
+  } finally {
+    process.env.PATH = saved;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+  t.done();
 };
