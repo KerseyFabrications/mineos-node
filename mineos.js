@@ -868,6 +868,17 @@ mineos.mc = function (server_name, base_dir) {
             cb();
           }
         },
+        function (cb) {
+          // screen -L appends to screenlog.0 for the life of the server
+          // directory. Keep only this run's log and the one before it, so
+          // a failed start can still be diagnosed without unbounded growth.
+          var current = path.join(self.env.cwd, "screenlog.0");
+          fs.rename(current, path.join(self.env.cwd, "screenlog.1"), function (err) {
+            if (err && err.code != "ENOENT")
+              logging.warn("[{0}] could not rotate screenlog.0: {1}".format(self.server_name, err.message));
+            cb();
+          });
+        },
         async.apply(which, "screen"),
         function (binary, cb) {
           var proc = child_process.spawn(binary, args, params);
