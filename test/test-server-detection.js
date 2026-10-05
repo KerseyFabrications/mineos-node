@@ -16,3 +16,15 @@ test.screen_regex = function (t) {
   t.equal(name("java -jar screen.jar"), null);
   t.done();
 };
+
+test.valid_profile_part = function (t) {
+  t.ok(mineos.valid_profile_part("minecraft_server.26.3.jar"));
+  t.ok(mineos.valid_profile_part("26.3.0.48-beta"));
+  t.ok(mineos.valid_profile_part("Server Pack 1.0.zip"));
+  t.ok(!mineos.valid_profile_part("../escape.jar"));
+  t.ok(!mineos.valid_profile_part("dir/file.jar"));
+  t.ok(!mineos.valid_profile_part(".hidden"));
+  t.ok(!mineos.valid_profile_part(""));
+  t.ok(!mineos.valid_profile_part(undefined));
+  t.done();
+};

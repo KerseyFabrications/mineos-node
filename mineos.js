@@ -102,6 +102,12 @@ mineos.server_pids_up = function () {
   return servers_found;
 };
 
+// A profile id or file name becomes a path component under profiles/; it must
+// stay a single plain name (it comes from download sources' metadata).
+mineos.valid_profile_part = function (part) {
+  return typeof part == "string" && part.length > 0 && part[0] != "." && !/[\/\\\0]/.test(part) && part.indexOf("..") == -1;
+};
+
 mineos.valid_server_name = function (server_name) {
   var regex_valid_server_name = /^(?!\.)[a-zA-Z0-9_\.]+$/;
   return regex_valid_server_name.test(server_name);

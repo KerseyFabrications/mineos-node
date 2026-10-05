@@ -398,29 +398,37 @@ server.backend = function(base_dir, socket_emitter, user_config) {
           break;
         case 'download':
           for (var idx in self.profiles) {
-            if (self.profiles[idx].id == args.profile.id) {
+            if (self.profiles[idx].id == (args.profile || {}).id) {
+              // Everything about the download comes from the profile list this
+              // server built, never from the request: the URL, file name and
+              // group decide what root downloads, where it writes and what
+              // postdownload hook runs.
+              var profile = self.profiles[idx];
               var SOURCES = require('./profiles.js')['profile_manifests'];
-              var profile_dir = path.join(base_dir, 'profiles', args.profile.id);
-              var dest_filepath = path.join(profile_dir, args.profile.filename);
+              if (!mineos.valid_profile_part(profile.id) || !mineos.valid_profile_part(profile.filename)) {
+                logging.error('[WEBUI] Refusing to download profile with an unsafe id or file name:', profile.id, profile.filename);
+                break;
+              }
+              var profile_dir = path.join(base_dir, 'profiles', profile.id);
+              var dest_filepath = path.join(profile_dir, profile.filename);
 
               async.series([
                 async.apply(fs.ensureDir, profile_dir),
                 function(cb) {
                   var progress = require('request-progress');
                   var request = require('request');
-                  progress(request({url: args.profile.url, headers: {'User-Agent': 'MineOS-node'}}), { throttle: 250, delay: 100 })
+                  progress(request({url: profile.url, headers: {'User-Agent': 'MineOS-node'}}), { throttle: 250, delay: 100 })
                     .on('error', function(err) {
                       logging.error(err);
                     })
                     .on('progress', function(state) {
-                      args.profile.progress = state;
-                      self.front_end.emit('file_progress', args.profile);
+                      self.front_end.emit('file_progress', Object.assign({}, profile, {progress: state}));
                     })
                     .on('complete', function(response) {
                       if (response.statusCode == 200) {
-                        logging.info('[WEBUI] Successfully downloaded {0} to {1}'.format(args.profile.url, dest_filepath));
+                        logging.info('[WEBUI] Successfully downloaded {0} to {1}'.format(profile.url, dest_filepath));
                       } else {
-                        logging.error('[WEBUI] Server was unable to download file:', args.profile.url);
+                        logging.error('[WEBUI] Server was unable to download file:', profile.url);
                         logging.error('[WEBUI] Remote server returned status {0} with headers:'.format(response.statusCode), response.headers);
                       }
                       cb(response.statusCode != 200);
@@ -428,7 +436,7 @@ server.backend = function(base_dir, socket_emitter, user_config) {
                     .pipe(fs.createWriteStream(dest_filepath))
                 },
                 function(cb) {
-                  switch(path.extname(args.profile.filename).toLowerCase()) {
+                  switch(path.extname(profile.filename).toLowerCase()) {
                     case '.jar':
                       cb();
                       break;
@@ -457,8 +465,8 @@ server.backend = function(base_dir, socket_emitter, user_config) {
                   // redownload of profiles, SOURCES might be empty/lacking the unfinished dl.
                   // opting for full try/catch around postdownload to gracefully handle profile errors
                   try {
-                    if ('postdownload' in SOURCES[args.profile['group']])
-                      SOURCES[args.profile['group']].postdownload(profile_dir, dest_filepath, cb);
+                    if ('postdownload' in SOURCES[profile['group']])
+                      SOURCES[profile['group']].postdownload(profile_dir, dest_filepath, cb);
                     else
                       cb();
                   } catch (e) {
@@ -468,6 +476,8 @@ server.backend = function(base_dir, socket_emitter, user_config) {
                   }
                 }
               ], function(err, output) {
+                if (err)
+                  logging.error('[WEBUI] Profile {0} did not finish installing:'.format(profile.id), err);
                 self.send_profile_list();
               })
               break;
