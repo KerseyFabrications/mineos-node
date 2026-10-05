@@ -8,7 +8,8 @@
 # Supply chain: actions are pinned to commit SHAs (Dependabot keeps them
 # current), each job gets only the permissions it needs, images carry build
 # provenance and an SBOM, and every published image is signed with cosign
-# (keyless, tied to this workflow). Verify with:
+# (keyless, tied to this workflow). Verify with cosign 3 or newer (older
+# releases do not read the signature format it writes):
 #   cosign verify ghcr.io/<owner>/mineos-node:<tag> \
 #     --certificate-identity-regexp 'https://github.com/<owner>/mineos-node/' \
 #     --certificate-oidc-issuer https://token.actions.githubusercontent.com
