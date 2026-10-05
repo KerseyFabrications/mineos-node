@@ -301,7 +301,7 @@ test.get_start_args = function(test) {
     function(callback) {
       instance.get_start_args(function(err, args) {
         test.ifError(err);
-        test.equal(args[0], '-dmS');
+        test.equal(args[0], '-dmSL');
         test.equal(args[1], 'mc-testing');
         test.equal(args[2], './bin/php5/bin/php');
         test.equal(args[3], 'PocketMine-MP.phar');
@@ -312,7 +312,7 @@ test.get_start_args = function(test) {
     function(callback) {
       instance.get_start_args(function(err, args) {
         test.ifError(err);
-        test.equal(args[0], '-dmS');
+        test.equal(args[0], '-dmSL');
         test.equal(args[1], 'mc-testing');
         test.equal(args[2].slice(-4), 'java');
         test.equal(args[3], '-server');
@@ -328,7 +328,7 @@ test.get_start_args = function(test) {
     function(callback) {
       instance.get_start_args(function(err, args) {
         test.ifError(err);
-        test.equal(args[0], '-dmS');
+        test.equal(args[0], '-dmSL');
         test.equal(args[1], 'mc-testing');
         test.equal(args[2], './Cuberite');
         callback(err);
@@ -368,7 +368,7 @@ test.get_start_args_java = function(test) {
     function(callback) {
       instance.get_start_args(function(err, args) {
         test.ifError(err);
-        test.equal(args[0], '-dmS');
+        test.equal(args[0], '-dmSL');
         test.equal(args[1], 'mc-testing');
         test.equal(args[2].slice(-4), 'java');
         test.equal(args[3], '-server');
@@ -393,7 +393,7 @@ test.get_start_args_java = function(test) {
     function(callback) {
       instance.get_start_args(function(err, args) {
         test.ifError(err);
-        test.equal(args[0], '-dmS');
+        test.equal(args[0], '-dmSL');
         test.equal(args[1], 'mc-testing');
         test.equal(args[2].slice(-4), 'java');
         test.equal(args[3], '-server');
@@ -409,7 +409,7 @@ test.get_start_args_java = function(test) {
     function(callback) {
       instance.get_start_args(function(err, args) {
         test.ifError(err);
-        test.equal(args[0], '-dmS');
+        test.equal(args[0], '-dmSL');
         test.equal(args[1], 'mc-testing');
         test.equal(args[2].slice(-4), 'java');
         test.equal(args[3], '-server');
@@ -428,7 +428,7 @@ test.get_start_args_java = function(test) {
     function(callback) {
       instance.get_start_args(function(err, args) {
         test.ifError(err);
-        test.equal(args[0], '-dmS');
+        test.equal(args[0], '-dmSL');
         test.equal(args[1], 'mc-testing');
         test.equal(args[2].slice(-4), 'java');
         test.equal(args[3], '-server');
@@ -447,7 +447,7 @@ test.get_start_args_java = function(test) {
     function(callback) {
       instance.get_start_args(function(err, args) {
         test.ifError(err);
-        test.equal(args[0], '-dmS');
+        test.equal(args[0], '-dmSL');
         test.equal(args[1], 'mc-testing');
         test.equal(args[2].slice(-4), 'java');
         test.equal(args[3], '-server');
@@ -466,7 +466,7 @@ test.get_start_args_java = function(test) {
     function(callback) {
       instance.get_start_args(function(err, args) {
         test.ifError(err);
-        test.equal(args[0], '-dmS');
+        test.equal(args[0], '-dmSL');
         test.equal(args[1], 'mc-testing');
         test.equal(args[2].slice(-4), 'java');
         test.equal(args[3], '-server');
@@ -498,7 +498,7 @@ test.get_start_args_forge = function(test) {
     function(callback) {
       instance.get_start_args(function(err, args) {
         test.ifError(err);
-        test.equal(args[0], '-dmS');
+        test.equal(args[0], '-dmSL');
         test.equal(args[1], 'mc-testing');
         test.equal(args[2].slice(-4), 'java');
         test.equal(args[3], '-server');
@@ -515,7 +515,7 @@ test.get_start_args_forge = function(test) {
     function(callback) {
       instance.get_start_args(function(err, args) {
         test.ifError(err);
-        test.equal(args[0], '-dmS');
+        test.equal(args[0], '-dmSL');
         test.equal(args[1], 'mc-testing');
         test.equal(args[2].slice(-4), 'java');
         test.equal(args[3], '-server');
@@ -543,7 +543,7 @@ test.get_start_args_cuberite = function(test) {
     function(callback) {
       instance.get_start_args(function(err, args) {
         test.ifError(err);
-        test.equal(args[0], '-dmS');
+        test.equal(args[0], '-dmSL');
         test.equal(args[1], 'mc-testing');
         test.equal(args[2], './Cuberite');
         callback(err);
@@ -565,7 +565,7 @@ test.get_start_args_phar = function(test) {
     function(callback) {
       instance.get_start_args(function(err, args) {
         test.ifError(err);
-        test.equal(args[0], '-dmS');
+        test.equal(args[0], '-dmSL');
         test.equal(args[1], 'mc-testing');
         test.equal(args[2], './bin/php5/bin/php');
         test.equal(args[3], 'PocketMine-MP.phar');
@@ -578,7 +578,7 @@ test.get_start_args_phar = function(test) {
       fs.ensureFileSync(path.join(php7_path, 'php'));
       instance.get_start_args(function(err, args) {
         test.ifError(err);
-        test.equal(args[0], '-dmS');
+        test.equal(args[0], '-dmSL');
         test.equal(args[1], 'mc-testing');
         test.equal(args[2], './bin/php7/bin/php');
         test.equal(args[3], 'PocketMine-MP.phar');
@@ -610,7 +610,7 @@ test.get_start_args_unconventional = function(test) {
     function(callback) {
       instance.get_start_args(function(err, args) {
         test.ifError(err);
-        test.equal(args[0], '-dmS');
+        test.equal(args[0], '-dmSL');
         test.equal(args[1], 'mc-testing');
         test.equal(args[2].slice(-4), 'java');
         test.equal(args[3], '-server');
@@ -623,7 +623,7 @@ test.get_start_args_unconventional = function(test) {
     function(callback) {
       instance.get_start_args(function(err, args) {
         test.ifError(err);
-        test.equal(args[0], '-dmS');
+        test.equal(args[0], '-dmSL');
         test.equal(args[1], 'mc-testing');
         test.equal(args[2].slice(-4), 'java');
         test.equal(args[3], '-server');
@@ -637,7 +637,7 @@ test.get_start_args_unconventional = function(test) {
     function(callback) {
       instance.get_start_args(function(err, args) {
         test.ifError(err);
-        test.equal(args[0], '-dmS');
+        test.equal(args[0], '-dmSL');
         test.equal(args[1], 'mc-testing');
         test.equal(args[2].slice(-4), 'java');
         test.equal(args[3], '-server');
@@ -652,7 +652,7 @@ test.get_start_args_unconventional = function(test) {
     function(callback) {
       instance.get_start_args(function(err, args) {
         test.ifError(err);
-        test.equal(args[0], '-dmS');
+        test.equal(args[0], '-dmSL');
         test.equal(args[1], 'mc-testing');
         test.equal(args[2].slice(-4), 'java');
         test.equal(args[3], '-server');
@@ -668,7 +668,7 @@ test.get_start_args_unconventional = function(test) {
     function(callback) {
       instance.get_start_args(function(err, args) {
         test.ifError(err);
-        test.equal(args[0], '-dmS');
+        test.equal(args[0], '-dmSL');
         test.equal(args[1], 'mc-testing');
         test.equal(args[2].slice(-4), 'java');
         test.equal(args[3], '-server');
@@ -685,7 +685,7 @@ test.get_start_args_unconventional = function(test) {
     function(callback) {
       instance.get_start_args(function(err, args) {
         test.ifError(err);
-        test.equal(args[0], '-dmS');
+        test.equal(args[0], '-dmSL');
         test.equal(args[1], 'mc-testing');
         test.equal(args[2].slice(-4), 'java');
         test.equal(args[3], '-server');
