@@ -1,6 +1,17 @@
 var path = require('path');
 var fs = require('fs-extra');
+var crypto = require('crypto');
 var profile = require('./template');
+var java = require('../java');
+
+// NeoForged ServerStarterJar, pinned so every install runs the same reviewed
+// launcher. To update: take the new release's server.jar digest from
+// https://github.com/neoforged/ServerStarterJar/releases.
+var SERVER_STARTER_VERSION = '0.1.35';
+var SERVER_STARTER_SHA256 = 'd019d815868d451e57bdb965174b8443ec361336e84e9c41abc41a6c627bacd1';
+var SERVER_STARTER_URL = 'https://github.com/neoforged/ServerStarterJar/releases/download/{0}/server.jar';
+
+var INSTALLER_TIMEOUT_MS = 15 * 60 * 1000;
 
 exports.profile = {
   name: 'NeoForge Mod',
@@ -20,31 +31,34 @@ exports.profile = {
         versions.push(match[1]);
       }
 
-      // NeoForge versions: <mc_minor>.<mc_patch>.<build>[-beta]
-      // e.g. 21.4.111-beta -> Minecraft 1.21.4, build 111, beta
-      var nf_regex = /^(\d+)\.(\d+)\.(\d+)(-beta)?$/;
+      // NeoForge versions up to 1.21.x: <mc_minor>.<mc_patch>.<build>[-beta]
+      //   e.g. 21.4.111-beta -> Minecraft 1.21.4, build 111, beta
+      // From 26.x on: <year>.<drop>.<hotfix>.<build>[-beta|-alpha...]
+      //   e.g. 26.3.0.48-beta -> Minecraft 26.3, build 48, beta
+      var nf_regex = /^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?(-.+)?$/;
 
       for (var i = 0; i < versions.length; i++) {
         var nfver = versions[i];
         var ver = nfver.match(nf_regex);
         if (!ver) continue;
 
-        var mcver = '1.{0}.{1}'.format(ver[1], ver[2]);
-        var is_beta = !!ver[4];
+        var mcver = java.minecraftFromNeoForge(nfver);
+        if (!mcver) continue;
+        var is_prerelease = !!ver[5];
 
         var item = new profile();
         item['id'] = nfver;
-        item['type'] = is_beta ? 'snapshot' : 'release';
+        item['type'] = is_prerelease ? 'snapshot' : 'release';
         item['group'] = 'neoforge';
-        item['webui_desc'] = is_beta
-          ? 'NeoForge {0} (MC {1}, beta)'.format(nfver, mcver)
+        item['webui_desc'] = is_prerelease
+          ? 'NeoForge {0} (MC {1}, {2})'.format(nfver, mcver, ver[5].slice(1).split(/[.+]/)[0])
           : 'NeoForge {0} (MC {1})'.format(nfver, mcver);
         item['weight'] = 0;
         item['version'] = nfver;
         item['release_version'] = nfver;
         item['filename'] = 'neoforge-{0}-installer.jar'.format(nfver);
         item['url'] = 'https://maven.neoforged.net/releases/net/neoforged/neoforge/{0}/{1}'.format(nfver, item['filename']);
-        item['downloaded'] = fs.existsSync(path.join(profile_dir, item.id, item.filename));
+        item['downloaded'] = fs.existsSync(path.join(profile_dir, item.id, 'server.jar'));
         p.push(item);
       }
     } catch (e) { }
@@ -62,34 +76,60 @@ exports.profile = {
     // ServerStarterJar parses run.sh, builds the module layer in-process,
     // and chains to cpw.mods.bootstraplauncher.BootstrapLauncher, so
     // MineOS' stock `java -Xms -Xmx -jar <jar> nogui` invocation works.
+    //
+    // server.jar is only written once both steps succeed, so the profile
+    // shows as downloaded only when it can actually start a server.
     var child_process = require('child_process');
     var request = require('request');
 
     var install_dir = path.dirname(dest_filepath);
+    var nfver = path.basename(install_dir);
     var server_jar = path.join(install_dir, 'server.jar');
-    var SERVER_STARTER_URL = 'https://github.com/neoforged/ServerStarterJar/releases/latest/download/server.jar';
+    var partial_jar = server_jar + '.part';
+
+    var done = false;
+    function finish(err) {
+      if (done) return;
+      done = true;
+      if (err) fs.remove(partial_jar, function () { callback(err); });
+      else callback(null);
+    }
+
+    // The installer runs the target version's processors, so run it on the
+    // Java that version's servers will use.
+    var required = java.requiredJavaForMinecraft(java.minecraftFromNeoForge(nfver));
+    var picked = required ? java.pickJava(required, java.installedJavas()) : null;
+    var java_binary = picked ? picked.binary : 'java';
 
     child_process.execFile(
-      'java',
+      java_binary,
       ['-jar', dest_filepath, '--installServer'],
-      { cwd: install_dir, maxBuffer: 10 * 1024 * 1024 },
+      { cwd: install_dir, maxBuffer: 10 * 1024 * 1024, timeout: INSTALLER_TIMEOUT_MS },
       function (err, stdout, stderr) {
         if (err) {
-          return callback(new Error('NeoForge installer failed: ' + (stderr || err.message)));
+          return finish(new Error('NeoForge installer failed: ' + (stderr || err.message)));
         }
 
-        var stream = fs.createWriteStream(server_jar);
-        request(SERVER_STARTER_URL)
-          .on('error', function (dl_err) {
-            callback(dl_err);
+        var hash = crypto.createHash('sha256');
+        var stream = fs.createWriteStream(partial_jar);
+        stream.on('error', finish);
+        stream.on('finish', function () {
+          var digest = hash.digest('hex');
+          if (digest != SERVER_STARTER_SHA256)
+            return finish(new Error('ServerStarterJar checksum mismatch: got ' + digest));
+          fs.move(partial_jar, server_jar, { overwrite: true }, finish);
+        });
+
+        request(SERVER_STARTER_URL.format(SERVER_STARTER_VERSION))
+          .on('error', finish)
+          .on('response', function (res) {
+            if (res.statusCode != 200)
+              finish(new Error('ServerStarterJar download failed: HTTP ' + res.statusCode));
           })
-          .pipe(stream)
-          .on('finish', function () {
-            callback(null);
+          .on('data', function (chunk) {
+            hash.update(chunk);
           })
-          .on('error', function (write_err) {
-            callback(write_err);
-          });
+          .pipe(stream);
       }
     );
   } //end postdownload
