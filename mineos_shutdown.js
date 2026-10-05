@@ -55,13 +55,27 @@ function stop_new_servers() {
     for (var name of up) {
         if (name in signalled) continue;
         signalled[name] = true;
-        console.log("Stopping", name);
-        new mineos.mc(name, base_directory).stop(function (server_name) {
+        var instance = new mineos.mc(name, base_directory);
+        var report = function (server_name) {
             return function (err) {
                 if (err) console.error("    could not stop", server_name, "cleanly:", err);
                 else console.log("    stopped", server_name);
             };
-        }(name));
+        }(name);
+        // Proxies (BungeeCord, Velocity) are "unconventional" servers: they have
+        // no world to save and do not understand stop, so end them directly
+        // instead of waiting out the timeout.
+        instance.property("unconventional", function (instance, server_name, report) {
+            return function (err, unconventional) {
+                if (unconventional) {
+                    console.log("Ending proxy", server_name);
+                    instance.kill(report);
+                } else {
+                    console.log("Stopping", server_name);
+                    instance.stop(report);
+                }
+            };
+        }(instance, name, report));
     }
     return up;
 }
