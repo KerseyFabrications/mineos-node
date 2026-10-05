@@ -10,9 +10,13 @@ var BASE_DIR = '/home/runner/minecraft';
 var FS_DELAY_MS = 200;
 var PROC_START_DELAY_MS = 200;
 
+// Servers are created owned by the user running the tests. Backups and
+// archives run as the server's owner and group, and a process that is not
+// root can only switch to its own primary group (the CI runner's 118 is a
+// supplementary group), so a fixed uid/gid made those tests fail off root.
 var OWNER_CREDS = {
-  uid: 1001,
-  gid: 118
+  uid: process.getuid(),
+  gid: process.getgid()
 }
 
 function oct2dec(octal_val) {
