@@ -1,14 +1,14 @@
 # Builds the container image for linux/amd64 and linux/arm64 on native runners
 # and publishes one multi-arch image to GitHub Container Registry.
 #
-# Tags: the branch name for branch pushes, the version for v* tags (and
+# Tags: the branch name for every branch push, the version for v* tags (and
 # "latest" for the newest release), and sha-<short> for every build.
 
 name: Container image
 
 on:
   push:
-    branches: [master]
+    branches: ["**"]
     tags: ["v*"]
   pull_request:
     branches: [master]
