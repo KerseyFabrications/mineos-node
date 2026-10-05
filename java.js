@@ -8,6 +8,7 @@
 var fs = require("fs");
 var path = require("path");
 var child_process = require("child_process");
+var zlib = require("zlib");
 var which = require("which");
 var mc_version = require("./mc_version");
 
@@ -28,29 +29,60 @@ var jar_cache = {}; // jar path -> {mtimeMs, size, major}
 
 // Java major a vanilla (or bundler) server jar declares in its version.json.
 // The result is cached until the jar changes: reading a jar loads all of it.
+//
+// The jar belongs to the server's owner, so it is opened without following a
+// symlink or blocking on a FIFO, and every check is made on what was opened.
+// version.json is inflated with a hard output limit, whatever its header says.
 function requiredJavaFromJar(jar_path) {
-  var st;
+  var fd;
   try {
-    st = fs.lstatSync(jar_path);
+    fd = fs.openSync(jar_path, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
   } catch (e) {
     return null;
   }
-  if (!st.isFile() || st.size > JAR_MAX_BYTES) return null;
-
-  var cached = jar_cache[jar_path];
-  if (cached && cached.mtimeMs == st.mtimeMs && cached.size == st.size) return cached.major;
-
-  var major = null;
   try {
-    var AdmZip = require("adm-zip");
-    var entry = new AdmZip(jar_path).getEntry("version.json");
-    if (entry && entry.header.size <= VERSION_JSON_MAX_BYTES) {
-      var parsed = parseInt(JSON.parse(entry.getData().toString("utf8")).java_version, 10);
-      major = isNaN(parsed) ? null : parsed;
-    }
-  } catch (e) {}
-  jar_cache[jar_path] = { mtimeMs: st.mtimeMs, size: st.size, major: major };
-  return major;
+    var st = fs.fstatSync(fd);
+    if (!st.isFile() || st.size > JAR_MAX_BYTES) return null;
+
+    var cached = jar_cache[jar_path];
+    if (cached && cached.mtimeMs == st.mtimeMs && cached.size == st.size) return cached.major;
+
+    var major = null;
+    try {
+      var data = Buffer.alloc(st.size);
+      var got = 0;
+      while (got < st.size) {
+        var n = fs.readSync(fd, data, got, st.size - got, got);
+        if (!n) break;
+        got += n;
+      }
+      var AdmZip = require("adm-zip");
+      var entry = new AdmZip(data.subarray(0, got)).getEntry("version.json");
+      var text = entry ? inflateEntry(entry, VERSION_JSON_MAX_BYTES) : null;
+      if (text) {
+        var parsed = parseInt(JSON.parse(text).java_version, 10);
+        major = isNaN(parsed) ? null : parsed;
+      }
+    } catch (e) {}
+    jar_cache[jar_path] = { mtimeMs: st.mtimeMs, size: st.size, major: major };
+    return major;
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+// A zip entry's contents as text, or null if it is stored some other way or
+// would be larger than max_bytes.
+function inflateEntry(entry, max_bytes) {
+  var raw = entry.getCompressedData();
+  var method = entry.header.method;
+  if (method === 0) return raw.length <= max_bytes ? raw.toString("utf8") : null;
+  if (method !== 8) return null;
+  try {
+    return zlib.inflateRawSync(raw, { maxOutputLength: max_bytes }).toString("utf8");
+  } catch (e) {
+    return null; // corrupt, or larger than max_bytes
+  }
 }
 
 function listDir(dir) {
@@ -161,6 +193,12 @@ function pickJava(required, javas) {
   return null;
 }
 
+// The runtime this host would use for a required major, chosen the same way
+// for server starts and for installers that run that server's version.
+function chooseJava(required) {
+  return pickJava(required, availableJavas());
+}
+
 function whichOrNull(name) {
   try {
     return which.sync(name);
@@ -237,7 +275,7 @@ function usedJavaVersion(cwd, sc, owner, callback) {
       real = fs.realpathSync(result.binary);
       st = fs.statSync(real);
     } catch (e) {
-      return callback(null, `Error accessing '${result.binary}'`);
+      return callback(null, "unknown (the Java binary could not be run)");
     }
     var cached = version_cache[real];
     if (cached && cached.mtimeMs == st.mtimeMs) return callback(null, cached.version);
@@ -261,6 +299,7 @@ module.exports = {
   installedJavas,
   availableJavas,
   pickJava,
+  chooseJava,
   resolveJava,
   usedJavaVersion,
 };

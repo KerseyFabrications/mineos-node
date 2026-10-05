@@ -36,14 +36,17 @@ RUN ARCH="$(dpkg --print-architecture)" \
   && /usr/lib/jvm/java-8-openjdk-${ARCH}/jre/bin/java -version \
   && java -version 2>&1 | grep -q '"25'
 
-#install node 24 from NodeSource's signed apt repository. The repository key is
-#checked against its published fingerprint before apt is told to trust it, so
-#no downloaded script runs as root.
+#install node 24 from NodeSource's signed apt repository. Only the key with
+#NodeSource's published fingerprint is exported into the keyring apt trusts,
+#so no downloaded script runs as root and no other key rides along.
 ARG NODESOURCE_SIGNER_FPR=6F71F525282841EEDAF851B42F59B5F99B1BE0B4
 RUN apt-get update && apt-get install -y gnupg \
   && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key -o /tmp/nodesource.key \
-  && gpg --show-keys --with-colons /tmp/nodesource.key | grep -q "^fpr:::::::::${NODESOURCE_SIGNER_FPR}:" \
-  && gpg --dearmor -o /usr/share/keyrings/nodesource.gpg /tmp/nodesource.key \
+  && export GNUPGHOME="$(mktemp -d)" \
+  && gpg --batch --quiet --import /tmp/nodesource.key \
+  && gpg --batch --export "${NODESOURCE_SIGNER_FPR}" > /usr/share/keyrings/nodesource.gpg \
+  && test -s /usr/share/keyrings/nodesource.gpg \
+  && rm -rf "$GNUPGHOME" \
   && echo "deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_24.x nodistro main" \
      > /etc/apt/sources.list.d/nodesource.list \
   && apt-get update && apt-get install -y nodejs \

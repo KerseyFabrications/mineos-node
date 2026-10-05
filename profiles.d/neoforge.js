@@ -97,7 +97,7 @@ exports.profile = {
     // The installer runs the target version's processors, so run it on the
     // Java that version's servers will use.
     var required = mc_version.requiredJavaForMinecraft(mc_version.minecraftFromNeoForge(nfver));
-    var picked = required ? java.pickJava(required, java.installedJavas()) : null;
+    var picked = required ? java.chooseJava(required) : null;
     var java_binary = picked ? picked.binary : 'java';
 
     function chown_tree(owner, cb) {
@@ -106,28 +106,57 @@ exports.profile = {
       });
     }
 
-    function run_installer(cb) {
-      child_process.execFile(
-        java_binary,
-        ['-jar', dest_filepath, '--installServer'],
-        {
-          cwd: install_dir,
-          uid: INSTALLER_UID,
-          gid: INSTALLER_GID,
-          env: { PATH: process.env.PATH, HOME: install_dir },
-          maxBuffer: 10 * 1024 * 1024,
-          timeout: INSTALLER_TIMEOUT_MS
-        },
-        function (err, stdout, stderr) {
-          cb(err ? new Error('NeoForge installer failed: ' + (stderr || err.message)) : null);
-        }
-      );
+    // The installer runs in its own process group, so on a timeout everything
+    // it started is killed with it, not just the java process.
+    function run_installer(callback) {
+      var stderr = '';
+      var called = false;
+      function cb(err) {
+        if (called) return;
+        called = true;
+        callback(err);
+      }
+      var child = child_process.spawn(java_binary, ['-jar', dest_filepath, '--installServer'], {
+        cwd: install_dir,
+        uid: INSTALLER_UID,
+        gid: INSTALLER_GID,
+        env: { PATH: process.env.PATH, HOME: install_dir },
+        detached: true,
+        stdio: ['ignore', 'ignore', 'pipe']
+      });
+      var timer = setTimeout(function () {
+        try { process.kill(-child.pid, 'SIGKILL'); } catch (e) {}
+      }, INSTALLER_TIMEOUT_MS);
+      child.stderr.on('data', function (chunk) {
+        if (stderr.length < 64 * 1024) stderr += chunk;
+      });
+      child.on('error', function (err) {
+        clearTimeout(timer);
+        cb(new Error('NeoForge installer failed: ' + err.message));
+      });
+      child.on('close', function (code, signal) {
+        clearTimeout(timer);
+        try { process.kill(-child.pid, 'SIGKILL'); } catch (e) {} // anything it left running
+        if (code === 0) cb(null);
+        else cb(new Error('NeoForge installer failed: ' + (stderr || (signal ? 'killed by ' + signal : 'exit code ' + code))));
+      });
+    }
+
+    // Hand the tree back to root, and take away any write or set-id bits the
+    // installer gave its files: a shared profile must not be writable by others.
+    function restore_tree(cb) {
+      chown_tree('0:0', function (err) {
+        if (err) return cb(err);
+        child_process.execFile('chmod', ['-R', 'u+rwX,go-w,ug-s', install_dir], function (chmod_err) {
+          cb(chmod_err ? new Error('could not reset permissions of ' + install_dir + ': ' + chmod_err.message) : null);
+        });
+      });
     }
 
     chown_tree(INSTALLER_UID + ':' + INSTALLER_GID, function (chown_err) {
       if (chown_err) return finish(chown_err);
       run_installer(function (install_err) {
-        chown_tree('0:0', function (restore_err) {
+        restore_tree(function (restore_err) {
           if (install_err || restore_err) return finish(install_err || restore_err);
           download_starter();
         });
