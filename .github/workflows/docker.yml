@@ -1,10 +1,11 @@
-# Builds the container image for linux/amd64 and linux/arm64 on native runners
-# and publishes one multi-arch image to GitHub Container Registry.
+# Tests the code, then builds the container image for linux/amd64 and
+# linux/arm64 on native runners and publishes one multi-arch image to GitHub
+# Container Registry. Nothing is built or published unless the tests pass.
 #
 # Tags: the branch name for every branch push, the version for v* tags (and
 # "latest" for the newest release), and sha-<short> for every build.
 
-name: Container image
+name: CI
 
 on:
   push:
@@ -22,7 +23,22 @@ env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/mineos-node
 
 jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24.x
+          cache: npm
+      - name: Install rdiff-backup
+        run: sudo apt-get update -y && sudo apt-get install -y rdiff-backup
+      - run: cp test/custom.conf .
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+
   build:
+    needs: test
     strategy:
       fail-fast: false
       matrix:
