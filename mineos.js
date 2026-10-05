@@ -109,6 +109,27 @@ mineos.server_pids_up = function () {
       }
     }
   }
+
+  // Reading another user's environ needs CAP_SYS_PTRACE, which containers do
+  // not have, so the java process is often not found above. It is the child
+  // of the server's screen session; parent ids in /proc/<pid>/stat are
+  // readable by anyone.
+  var screens_without_java = {};
+  for (var name in servers_found)
+    if (servers_found[name].screen && !servers_found[name].java) screens_without_java[servers_found[name].screen] = name;
+
+  if (Object.keys(screens_without_java).length) {
+    for (var j = 0; j < pids.length; j++) {
+      try {
+        var stat = fs.readFileSync(path.join(PROC_PATH, pids[j].toString(), "stat")).toString("ascii");
+        // pid (comm) state ppid ...; comm may contain spaces and parentheses
+        var ppid = stat.slice(stat.lastIndexOf(")") + 2).split(" ")[1];
+        if (ppid in screens_without_java) servers_found[screens_without_java[ppid]].java = parseInt(pids[j]);
+      } catch (e) {
+        continue;
+      }
+    }
+  }
   return servers_found;
 };
 
@@ -996,7 +1017,7 @@ mineos.mc = function (server_name, base_dir) {
     var test_interval_ms = 200;
     var MAX_ITERATIONS_TO_QUIT = 150;
 
-    if (!(self.server_name in pids)) {
+    if (!(self.server_name in pids) || !pids[self.server_name].java) {
       callback(true);
     } else {
       process.kill(pids[self.server_name].java, "SIGKILL");
