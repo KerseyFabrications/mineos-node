@@ -78,9 +78,12 @@ Java, Node and Ubuntu, and ships a container image people can actually install.
 
 ## Non-obvious behavior (these cost real time)
 
-- **Java selection.** A server runs `server.config` `[java] java_binary` when it is set, else the
-  first `java` on PATH. Nothing checks that the value is an executable: a jar name there makes
-  `screen` start and the server die immediately with no error in the UI.
+- **Java selection** lives in `java.js`. A set `[java] java_binary` always wins, and a value that
+  is not an executable (a jar name, a typo) fails the start with a clear error instead of letting
+  `screen` start and die silently. Left empty, the runtime is picked from the server's Minecraft
+  version: the `java_version` in the jar's `version.json`, else the version in the jar name, the
+  `libraries/` or `.fabric/` tree a loader installed, or the profile id. Legacy servers (below
+  1.17) never move to a modern runtime. If no version can be found, the `java` on PATH is used.
 - **Servers run inside `screen`.** The start command is `screen -dmS mc-<name> <java> ...` in the
   server directory, as the server directory's owner. A startup failure leaves no `logs/latest.log`,
   so screen's own log is the only record of why.

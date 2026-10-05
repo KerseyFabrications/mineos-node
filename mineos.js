@@ -531,14 +531,21 @@ mineos.mc = function (server_name, base_dir) {
 
   self.get_start_args = function (callback) {
     function type_jar_unconventional(inner_callback) {
-      var java_binary = which.sync("java");
-
       async.series(
         {
           binary: function (cb) {
             self.sc(function (err, dict) {
-              var value = (dict.java || {}).java_binary || java_binary;
-              cb(value.length ? null : "No java binary assigned for server.", value);
+              if (err) return cb(err);
+              java.resolveJava(self.env.cwd, dict, function (java_err, picked) {
+                if (java_err) return cb(java_err);
+                logging.info("[{0}] starting with {1} ({2}{3})".format(
+                  self.server_name,
+                  picked.binary,
+                  picked.source,
+                  picked.required ? ", needs Java {0}".format(picked.required) : "",
+                ));
+                cb(null, picked.binary);
+              });
             });
           },
           xmx: function (cb) {
@@ -605,14 +612,21 @@ mineos.mc = function (server_name, base_dir) {
     }
 
     function type_jar(inner_callback) {
-      var java_binary = which.sync("java");
-
       async.series(
         {
           binary: function (cb) {
             self.sc(function (err, dict) {
-              var value = (dict.java || {}).java_binary || java_binary;
-              cb(value.length ? null : "No java binary assigned for server.", value);
+              if (err) return cb(err);
+              java.resolveJava(self.env.cwd, dict, function (java_err, picked) {
+                if (java_err) return cb(java_err);
+                logging.info("[{0}] starting with {1} ({2}{3})".format(
+                  self.server_name,
+                  picked.binary,
+                  picked.source,
+                  picked.required ? ", needs Java {0}".format(picked.required) : "",
+                ));
+                cb(null, picked.binary);
+              });
             });
           },
           xmx: function (cb) {
@@ -1652,7 +1666,7 @@ mineos.mc = function (server_name, base_dir) {
         break;
       case "java_version_in_use":
         self.sc(function (err, dict) {
-          java.usedJavaVersion(dict, callback);
+          java.usedJavaVersion(self.env.cwd, dict || {}, callback);
         });
 
         break;
