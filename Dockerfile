@@ -37,18 +37,16 @@ RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
 
 #install mineos from this build context (not a fresh clone of upstream master,
 #so the image carries the code and package.json of the branch being built).
-#package-lock.json is dropped: it predates the package.json dependency bumps.
 COPY . /usr/games/minecraft
 RUN cd /usr/games/minecraft \
   && cp mineos.conf /etc/mineos.conf \
-  && chmod +x webui.js mineos_console.js service.js \
-  && rm -f package-lock.json
+  && chmod +x webui.js mineos_console.js service.js
 
 #build npm deps and clean up apt for image minimalization
 RUN cd /usr/games/minecraft \
   && apt-get update \
   && apt-get install -y build-essential \
-  && npm install \
+  && npm ci --omit=dev --no-audit --no-fund \
   && apt-get remove --purge -y build-essential \
   && apt-get autoremove -y \
   && apt-get clean \
