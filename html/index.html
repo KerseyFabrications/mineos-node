@@ -437,7 +437,7 @@
 						    <a ng-if="!instance.sc.minecraft.profile">{{ 'MC Protocol: ' + instance.heartbeat.ping.protocol }}</a>
 						</td>
                                                 <td class="hidden-phone">{{ (instance.sc.minecraft.unconventional ? '-----' : instance.sp['server-port']) }}</td>
-                                                <td><span class="label" ng-show="instance.heartbeat" ng-class="{'label-success': instance.heartbeat.up, 'label-important': !instance.heartbeat.up}">{{ instance.heartbeat.up ? 'up' : 'down' }}</span></td>
+                                                <td><span class="label" ng-show="instance.heartbeat" ng-class="{'label-success': instance.status() == 'UP', 'label-warning': instance.status() == 'STARTING' || instance.status() == 'STOPPING', 'label-important': instance.status() == 'DOWN'}">{{ instance.status() | translate }}</span></td>
                                                 <td>{{ instance.heartbeat.memory.VmRSS | kb_string_to_mb }}</td>
                                                 <td ng-repeat-start="col in columns">{{ instance.sp[col] }}</td>
                                                 <td ng-repeat-end></td>
@@ -809,9 +809,9 @@
                                                 <div class="body-inner no-padding" style="">
                                                     <!-- START Summary -->
                                                     <figure class="stats summary stacked">
-                                                        <div class="icon circle" ng-class="{green: servers[current].heartbeat.up, red: servers[current].heartbeat.up == false}"><span class="icone-ok"></span></div>
+                                                        <div class="icon circle" ng-class="{green: servers[current].status() == 'UP', orange: servers[current].status() == 'STARTING' || servers[current].status() == 'STOPPING', red: servers[current].status() == 'DOWN'}"><span class="icone-ok"></span></div>
                                                         <figcaption>
-                                                            <h4>{{ servers[current].heartbeat.up ? 'UP' : 'DOWN' }}<small translate="SERVER_STATUS"></small></h4>
+                                                            <h4>{{ servers[current].status() | translate }}<small translate="SERVER_STATUS"></small></h4>
                                                         </figcaption>
                                                     </figure><!--/ END Summary -->
 
@@ -866,14 +866,14 @@
                                                 <div class="body-inner">
 
                                                     <div class="span4">
-                                                        <button type="button" class="btn btn-success span12" ng-disabled="servers[current].heartbeat.up || !valid_server_name(current)" ng-click="server_command('start')" translate="START" ng-show="(servers[current].sc.java.jarfile && servers[current].sc.java.java_xmx)"></button>
+                                                        <button type="button" class="btn btn-success span12" ng-disabled="servers[current].heartbeat.up || servers[current].transition || !valid_server_name(current)" ng-click="server_command('start')" translate="START" ng-show="(servers[current].sc.java.jarfile && servers[current].sc.java.java_xmx)"></button>
                                                         <button type="button" class="btn btn-success span12" ng-disabled="servers[current].heartbeat.up || !valid_server_name(current)" ng-click="modals.open_new_server()" translate="START" ng-show="!(servers[current].sc.java.jarfile && servers[current].sc.java.java_xmx)"></button>
                                                     </div>
 
                                                     <div class="span4">
                                                         <div class="btn-group btn-block">
                                                             <button class="btn btn-danger span6" translate="STOP"
-                                                                    ng-disabled="!servers[current].heartbeat.up" 
+                                                                    ng-disabled="!servers[current].heartbeat.up || servers[current].transition"
                                                                     ng-click="server_command('stop')"
                                                                     ng-hide="servers[current].sc.minecraft.unconventional"
                                                                     ></button>
